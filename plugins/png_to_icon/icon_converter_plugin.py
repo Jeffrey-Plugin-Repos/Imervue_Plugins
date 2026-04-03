@@ -7,7 +7,7 @@ from Imervue.multi_language.language_wrapper import language_wrapper
 
 class IconConverterPlugin(ImervuePlugin):
     plugin_name = "PNG to Icon Converter"
-    plugin_version = "1.1.0"
+    plugin_version = "1.4.0"
     plugin_description = "Convert PNG images into multi-size icons"
     plugin_author = "JE Chen"
 
@@ -132,22 +132,37 @@ class IconConverterPlugin(ImervuePlugin):
         if file_path:
             self.convert_to_icon(file_path)
 
-    # 核心轉換
+    # 核心轉換：每個尺寸輸出獨立的 .ico 檔案
     def convert_to_icon(self, file_path):
         lang = self.lang()
 
         try:
+            # 開啟原始圖片並確保是 RGBA
             img = Image.open(file_path).convert("RGBA")
 
+            # 建立輸出目錄
             output_dir = os.path.join(os.path.dirname(file_path), "icons")
             os.makedirs(output_dir, exist_ok=True)
 
+            # 遍歷尺寸列表
             for size in self.SIZES:
+                # 1. 調整尺寸
                 resized = img.resize((size, size), Image.LANCZOS)
-                resized.save(os.path.join(output_dir, f"icon_{size}x{size}.png"))
 
-            ico_path = os.path.join(output_dir, "icon.ico")
-            img.save(ico_path, format="ICO", sizes=[(s, s) for s in self.SIZES])
+                # 2. 儲存為個別的 PNG (保留原本功能)
+                png_name = f"icon_{size}x{size}.png"
+                resized.save(os.path.join(output_dir, png_name))
+
+                # 3. 儲存為個別的 ICO (關鍵修改)
+                ico_name = f"icon_{size}x{size}.ico"
+                ico_path = os.path.join(output_dir, ico_name)
+
+                # 針對單一尺寸儲存為 ICO 格式
+                resized.save(
+                    ico_path,
+                    format="ICO",
+                    sizes=[(size, size)]
+                )
 
             QMessageBox.information(
                 self.main_window,
