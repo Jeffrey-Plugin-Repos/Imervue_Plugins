@@ -101,6 +101,26 @@ MODEL_DESCRIPTIONS = {
 
 
 # ===========================
+# Main-thread pre-import
+# ===========================
+
+def _preimport_rembg() -> bool:
+    """在主執行緒預先 import rembg/onnxruntime（載入 native DLL）。
+
+    PyInstaller 凍結環境下，在背景 QThread import 含 native DLL 的套件
+    會導致 segfault。先在主執行緒 import 一次後，背景執行緒就能安全使用。
+    """
+    try:
+        logger.info("_preimport_rembg: importing rembg on main thread...")
+        import rembg  # noqa: F401  — triggers onnxruntime DLL load
+        logger.info("_preimport_rembg: success")
+        return True
+    except Exception:
+        logger.error("_preimport_rembg: failed", exc_info=True)
+        return False
+
+
+# ===========================
 # \u53bb\u80cc Workers
 # ===========================
 
@@ -118,12 +138,15 @@ class _RemoveBackgroundWorker(QThread):
 
     def run(self):
         try:
+            logger.info("_RemoveBackgroundWorker.run() started")
             self.progress.emit("Loading rembg...")
             _MODELS_DIR.mkdir(parents=True, exist_ok=True)
             from rembg import remove, new_session
+            logger.info("_RemoveBackgroundWorker: rembg imported OK")
 
             self.progress.emit(f"Loading model: {self._model}...")
             session = new_session(self._model)
+            logger.info("_RemoveBackgroundWorker: model loaded")
 
             self.progress.emit("Processing image...")
             from PIL import Image
@@ -140,10 +163,11 @@ class _RemoveBackgroundWorker(QThread):
 
             self.progress.emit("Saving result...")
             output_img.save(self._output)
+            logger.info("_RemoveBackgroundWorker: done, saved to %s", self._output)
 
             self.finished.emit(True, self._output)
         except Exception as exc:
-            logger.error(f"Background removal failed: {exc}")
+            logger.error("Background removal failed: %s", exc, exc_info=True)
             self.finished.emit(False, str(exc))
 
     @staticmethod
@@ -512,8 +536,13 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
             return
 
         def _on_ready():
-            logger.info("_remove_single on_ready callback fired, opening dialog")
+            logger.info("_remove_single on_ready callback fired")
             try:
+                # 在主執行緒預先 import rembg（含 onnxruntime native DLL），
+                # 避免在背景 QThread import 導致凍結環境 segfault
+                if not _preimport_rembg():
+                    logger.error("_remove_single: preimport failed, aborting")
+                    return
                 dlg = RemoveBackgroundDialog(self.viewer, path)
                 logger.info("_remove_single: dialog created, calling exec()")
                 dlg.exec()
@@ -536,8 +565,11 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
         logger.info("_remove_batch called, %d paths", len(paths))
 
         def _on_ready():
-            logger.info("_remove_batch on_ready callback fired, opening dialog")
+            logger.info("_remove_batch on_ready callback fired")
             try:
+                if not _preimport_rembg():
+                    logger.error("_remove_batch: preimport failed, aborting")
+                    return
                 dlg = BatchRemoveBackgroundDialog(self.viewer, paths)
                 logger.info("_remove_batch: dialog created, calling exec()")
                 dlg.exec()
