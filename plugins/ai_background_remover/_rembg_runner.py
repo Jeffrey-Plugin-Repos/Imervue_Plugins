@@ -3,8 +3,8 @@ Standalone rembg runner — executed as a subprocess by the AI Background
 Remover plugin when running inside a PyInstaller frozen environment.
 
 Usage:
-    python _rembg_runner.py single <input> <output> <model> <alpha_matting> <models_dir>
-    python _rembg_runner.py batch  <input_list_file> <output_dir> <model> <alpha_matting> <models_dir>
+    python _rembg_runner.py <site_packages> single <input> <output> <model> <alpha_matting> <models_dir>
+    python _rembg_runner.py <site_packages> batch  <input_list_file> <output_dir> <model> <alpha_matting> <models_dir>
 
 Communication is via stdout lines:
     PROGRESS:<message>
@@ -96,22 +96,27 @@ def _run_batch(input_list_file: str, output_dir: str, model_name: str,
 
 if __name__ == "__main__":
     try:
-        mode = sys.argv[1]
+        # First arg: site-packages path to prepend to sys.path
+        site_packages = sys.argv[1]
+        if site_packages and os.path.isdir(site_packages):
+            sys.path.insert(0, site_packages)
+
+        mode = sys.argv[2]
         if mode == "single":
             _run_single(
-                input_path=sys.argv[2],
-                output_path=sys.argv[3],
-                model_name=sys.argv[4],
-                alpha_matting=sys.argv[5].lower() == "true",
-                models_dir=sys.argv[6],
+                input_path=sys.argv[3],
+                output_path=sys.argv[4],
+                model_name=sys.argv[5],
+                alpha_matting=sys.argv[6].lower() == "true",
+                models_dir=sys.argv[7],
             )
         elif mode == "batch":
             _run_batch(
-                input_list_file=sys.argv[2],
-                output_dir=sys.argv[3],
-                model_name=sys.argv[4],
-                alpha_matting=sys.argv[5].lower() == "true",
-                models_dir=sys.argv[6],
+                input_list_file=sys.argv[3],
+                output_dir=sys.argv[4],
+                model_name=sys.argv[5],
+                alpha_matting=sys.argv[6].lower() == "true",
+                models_dir=sys.argv[7],
             )
         else:
             print(f"ERROR:Unknown mode: {mode}", flush=True)

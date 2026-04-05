@@ -122,10 +122,12 @@ class _SubprocessRemoveWorker(QThread):
     progress = Signal(str)
     finished = Signal(bool, str)
 
-    def __init__(self, python: str, input_path: str, output_path: str,
+    def __init__(self, python: str, site_packages: str,
+                 input_path: str, output_path: str,
                  model_name: str, alpha_matting: bool):
         super().__init__()
         self._python = python
+        self._site_packages = site_packages
         self._input = input_path
         self._output = output_path
         self._model = model_name
@@ -133,9 +135,11 @@ class _SubprocessRemoveWorker(QThread):
 
     def run(self):
         try:
-            logger.info("_SubprocessRemoveWorker: starting, python=%s", self._python)
+            logger.info("_SubprocessRemoveWorker: starting, python=%s, site_packages=%s",
+                         self._python, self._site_packages)
             cmd = [
-                self._python, str(_RUNNER_SCRIPT), "single",
+                self._python, str(_RUNNER_SCRIPT),
+                self._site_packages, "single",
                 self._input, self._output, self._model,
                 str(self._alpha_matting), str(_MODELS_DIR),
             ]
@@ -175,10 +179,12 @@ class _SubprocessBatchWorker(QThread):
     progress = Signal(int, int, str)
     finished = Signal(int, int)
 
-    def __init__(self, python: str, paths: list[str], output_dir: str,
+    def __init__(self, python: str, site_packages: str,
+                 paths: list[str], output_dir: str,
                  model_name: str, alpha_matting: bool):
         super().__init__()
         self._python = python
+        self._site_packages = site_packages
         self._paths = paths
         self._output_dir = output_dir
         self._model = model_name
@@ -194,7 +200,8 @@ class _SubprocessBatchWorker(QThread):
             tmp.close()
 
             cmd = [
-                self._python, str(_RUNNER_SCRIPT), "batch",
+                self._python, str(_RUNNER_SCRIPT),
+                self._site_packages, "batch",
                 tmp.name, self._output_dir, self._model,
                 str(self._alpha_matting), str(_MODELS_DIR),
             ]
@@ -351,13 +358,13 @@ class _BatchRemoveWorker(QThread):
 class RemoveBackgroundDialog(QDialog):
 
     def __init__(self, main_gui: GPUImageView, image_path: str,
-                 external_python: str | None = None):
+                 frozen_env: tuple[str, str] | None = None):
         super().__init__(main_gui.main_window)
         self._gui = main_gui
         self._image_path = image_path
         self._lang = language_wrapper.language_word_dict
         self._worker = None
-        self._external_python = external_python
+        self._frozen_env = frozen_env  # (python_path, site_packages_path)
 
         self.setWindowTitle(self._lang.get("bg_remove_title", "AI Background Removal"))
         self.setMinimumWidth(480)
@@ -433,10 +440,11 @@ class RemoveBackgroundDialog(QDialog):
         model = self._model_combo.currentData()
         alpha = self._alpha_check.isChecked()
 
-        if self._external_python:
+        if self._frozen_env:
             # Frozen: use subprocess
+            python, site_pkgs = self._frozen_env
             self._worker = _SubprocessRemoveWorker(
-                self._external_python, self._image_path, output, model, alpha,
+                python, site_pkgs, self._image_path, output, model, alpha,
             )
         else:
             # Dev: use in-process
@@ -479,13 +487,13 @@ class RemoveBackgroundDialog(QDialog):
 class BatchRemoveBackgroundDialog(QDialog):
 
     def __init__(self, main_gui: GPUImageView, paths: list[str],
-                 external_python: str | None = None):
+                 frozen_env: tuple[str, str] | None = None):
         super().__init__(main_gui.main_window)
         self._gui = main_gui
         self._paths = paths
         self._lang = language_wrapper.language_word_dict
         self._worker = None
-        self._external_python = external_python
+        self._frozen_env = frozen_env
 
         self.setWindowTitle(self._lang.get("bg_remove_batch_title", "Batch AI Background Removal"))
         self.setMinimumWidth(480)
@@ -558,9 +566,10 @@ class BatchRemoveBackgroundDialog(QDialog):
         model = self._model_combo.currentData()
         alpha = self._alpha_check.isChecked()
 
-        if self._external_python:
+        if self._frozen_env:
+            python, site_pkgs = self._frozen_env
             self._worker = _SubprocessBatchWorker(
-                self._external_python, self._paths, output_dir, model, alpha,
+                python, site_pkgs, self._paths, output_dir, model, alpha,
             )
         else:
             self._worker = _BatchRemoveWorker(
@@ -647,13 +656,21 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
             )
             action.triggered.connect(lambda: self._remove_batch(paths))
 
-    def _get_external_python(self) -> str | None:
-        """In frozen mode, find the external Python. Returns None in dev mode."""
+    def _get_frozen_env(self) -> tuple[str, str] | None:
+        """In frozen mode, find external Python and site-packages path.
+
+        Returns (python_path, site_packages_path) or None in dev mode.
+        """
         if not _is_frozen():
             return None
         python = _find_external_python()
-        logger.info("External python for subprocess: %s", python)
-        return python
+        if not python:
+            logger.error("No external Python found for subprocess")
+            return None
+        from Imervue.system.app_paths import app_dir
+        site_pkgs = str(app_dir() / "lib" / "site-packages")
+        logger.info("Frozen env: python=%s, site_packages=%s", python, site_pkgs)
+        return python, site_pkgs
 
     def _open_single_dialog(self):
         images = self.viewer.model.images
@@ -670,8 +687,8 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
         def _on_ready():
             logger.info("_remove_single on_ready fired")
             try:
-                python = self._get_external_python()
-                dlg = RemoveBackgroundDialog(self.viewer, path, external_python=python)
+                env = self._get_frozen_env()
+                dlg = RemoveBackgroundDialog(self.viewer, path, frozen_env=env)
                 logger.info("_remove_single: dialog created, calling exec()")
                 dlg.exec()
                 logger.info("_remove_single: dialog exec() returned")
@@ -695,8 +712,8 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
         def _on_ready():
             logger.info("_remove_batch on_ready fired")
             try:
-                python = self._get_external_python()
-                dlg = BatchRemoveBackgroundDialog(self.viewer, paths, external_python=python)
+                env = self._get_frozen_env()
+                dlg = BatchRemoveBackgroundDialog(self.viewer, paths, frozen_env=env)
                 logger.info("_remove_batch: dialog created, calling exec()")
                 dlg.exec()
                 logger.info("_remove_batch: dialog exec() returned")
