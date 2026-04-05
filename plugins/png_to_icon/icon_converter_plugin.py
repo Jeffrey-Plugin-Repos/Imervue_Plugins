@@ -1,20 +1,139 @@
-import os
-from PIL import Image
+"""
+PNG to Icon Converter Plugin
+Convert PNG images into multi-size .ico and .png icon files.
+
+Requires Pillow — auto-installed on first use via the main app's pip installer.
+"""
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import QMessageBox, QFileDialog
+
 from Imervue.plugin.plugin_base import ImervuePlugin
+from Imervue.plugin.pip_installer import ensure_dependencies
 from Imervue.multi_language.language_wrapper import language_wrapper
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QMenu, QMenuBar
+    from Imervue.gpu_image_view.gpu_image_view import GPUImageView
+
+logger = logging.getLogger("Imervue.plugin.png_to_icon")
+
+REQUIRED_PACKAGES = [
+    ("PIL", "Pillow"),
+]
+
+SIZES = [16, 32, 48, 64, 128, 256]
+
+
+def _ensure_deps(parent, on_ready):
+    ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
 
 
 class IconConverterPlugin(ImervuePlugin):
     plugin_name = "PNG to Icon Converter"
-    plugin_version = "1.4.0"
+    plugin_version = "1.5.0"
     plugin_description = "Convert PNG images into multi-size icons"
     plugin_author = "JE Chen"
 
-    SIZES = [16, 32, 48, 64, 128, 256]
+    def _lang(self) -> dict:
+        return language_wrapper.language_word_dict
 
-    # 多語言
-    def get_translations(self):
+    # ===========================
+    # Menu Hooks
+    # ===========================
+
+    def on_build_menu_bar(self, menu_bar: QMenuBar) -> None:
+        lang = self._lang()
+        menu = menu_bar.addMenu(lang.get("icon_tools_menu", "Icon Tools"))
+
+        action = menu.addAction(lang.get("convert_current", "Convert Current Image to Icon"))
+        action.triggered.connect(self._convert_current_guarded)
+
+        action2 = menu.addAction(lang.get("select_png", "Select PNG to Convert"))
+        action2.triggered.connect(self._select_and_convert_guarded)
+
+    def on_build_context_menu(self, menu: QMenu, viewer: GPUImageView) -> None:
+        if not viewer.deep_zoom:
+            return
+        lang = self._lang()
+        action = menu.addAction(lang.get("context_convert", "Convert to Icon"))
+        action.triggered.connect(self._convert_current_guarded)
+
+    # ===========================
+    # 入口（經 ensure_dependencies）
+    # ===========================
+
+    def _convert_current_guarded(self):
+        lang = self._lang()
+        if not self.viewer.deep_zoom:
+            QMessageBox.warning(
+                self.main_window,
+                lang.get("error", "Error"),
+                lang.get("no_image", "No image loaded"),
+            )
+            return
+
+        path = self.viewer.model.images[self.viewer.current_index]
+        _ensure_deps(self.main_window, lambda: self._convert_to_icon(path))
+
+    def _select_and_convert_guarded(self):
+        lang = self._lang()
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.main_window,
+            lang.get("select_title", "Select PNG"),
+            "",
+            "PNG Files (*.png)",
+        )
+        if file_path:
+            _ensure_deps(self.main_window, lambda: self._convert_to_icon(file_path))
+
+    # ===========================
+    # 核心轉換
+    # ===========================
+
+    def _convert_to_icon(self, file_path: str):
+        from PIL import Image
+
+        lang = self._lang()
+        try:
+            img = Image.open(file_path).convert("RGBA")
+
+            output_dir = Path(file_path).parent / "icons"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            for size in SIZES:
+                resized = img.resize((size, size), Image.LANCZOS)
+
+                resized.save(str(output_dir / f"icon_{size}x{size}.png"))
+                resized.save(
+                    str(output_dir / f"icon_{size}x{size}.ico"),
+                    format="ICO",
+                    sizes=[(size, size)],
+                )
+
+            QMessageBox.information(
+                self.main_window,
+                "OK",
+                f"{lang.get('success', 'Icons saved to:')} \n{output_dir}",
+            )
+
+        except Exception as e:
+            logger.error(f"Icon conversion failed: {e}")
+            QMessageBox.critical(
+                self.main_window,
+                lang.get("error", "Error"),
+                str(e),
+            )
+
+    # ===========================
+    # 翻譯
+    # ===========================
+
+    def get_translations(self) -> dict[str, dict[str, str]]:
         return {
             "English": {
                 "icon_tools_menu": "Icon Tools",
@@ -67,112 +186,3 @@ class IconConverterPlugin(ImervuePlugin):
                 "select_title": "PNG 선택",
             },
         }
-
-    def on_plugin_loaded(self):
-        print(f"{self.plugin_name} loaded!")
-
-    # 取得語言字典（方便用）
-    def lang(self):
-        return language_wrapper.language_word_dict
-
-    # 選單列
-    def on_build_menu_bar(self, menu_bar):
-        lang = self.lang()
-
-        menu = menu_bar.addMenu(
-            lang.get("icon_tools_menu", "Icon Tools")
-        )
-
-        action = menu.addAction(
-            lang.get("convert_current", "Convert Current Image")
-        )
-        action.triggered.connect(self.convert_current_image)
-
-        action2 = menu.addAction(
-            lang.get("select_png", "Select PNG")
-        )
-        action2.triggered.connect(self.select_and_convert)
-
-    # 🖱右鍵選單（重點）
-    def on_build_context_menu(self, menu, viewer):
-        lang = self.lang()
-
-        action = menu.addAction(
-            lang.get("context_convert", "Convert to Icon")
-        )
-        action.triggered.connect(self.convert_current_image)
-
-    # 轉換目前圖片
-    def convert_current_image(self):
-        lang = self.lang()
-        viewer = self.viewer
-
-        if not viewer.deep_zoom:
-            QMessageBox.warning(
-                self.main_window,
-                lang.get("error", "Error"),
-                lang.get("no_image", "No image loaded")
-            )
-            return
-
-        image_path = viewer.model.images[viewer.current_index]
-        self.convert_to_icon(image_path)
-
-    # 手動選檔
-    def select_and_convert(self):
-        lang = self.lang()
-
-        file_path, _ = QFileDialog.getOpenFileName(
-            self.main_window,
-            lang.get("select_title", "Select PNG"),
-            "",
-            "PNG Files (*.png)"
-        )
-
-        if file_path:
-            self.convert_to_icon(file_path)
-
-    # 核心轉換：每個尺寸輸出獨立的 .ico 檔案
-    def convert_to_icon(self, file_path):
-        lang = self.lang()
-
-        try:
-            # 開啟原始圖片並確保是 RGBA
-            img = Image.open(file_path).convert("RGBA")
-
-            # 建立輸出目錄
-            output_dir = os.path.join(os.path.dirname(file_path), "icons")
-            os.makedirs(output_dir, exist_ok=True)
-
-            # 遍歷尺寸列表
-            for size in self.SIZES:
-                # 1. 調整尺寸
-                resized = img.resize((size, size), Image.LANCZOS)
-
-                # 2. 儲存為個別的 PNG (保留原本功能)
-                png_name = f"icon_{size}x{size}.png"
-                resized.save(os.path.join(output_dir, png_name))
-
-                # 3. 儲存為個別的 ICO (關鍵修改)
-                ico_name = f"icon_{size}x{size}.ico"
-                ico_path = os.path.join(output_dir, ico_name)
-
-                # 針對單一尺寸儲存為 ICO 格式
-                resized.save(
-                    ico_path,
-                    format="ICO",
-                    sizes=[(size, size)]
-                )
-
-            QMessageBox.information(
-                self.main_window,
-                "OK",
-                f"{lang.get('success', 'Saved to')} \n{output_dir}"
-            )
-
-        except Exception as e:
-            QMessageBox.critical(
-                self.main_window,
-                lang.get("error", "Error"),
-                str(e)
-            )

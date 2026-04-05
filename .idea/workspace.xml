@@ -2,10 +2,10 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/plugins/ai_background_remover/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/plugins/ai_background_remover/ai_background_remover.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/languages/spanish_language/spanish_language.py" beforeDir="false" afterPath="$PROJECT_DIR$/languages/spanish_language/spanish_language.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/plugins/png_to_icon/icon_converter_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/png_to_icon/icon_converter_plugin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/png_to_icon/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/png_to_icon/icon_converter_plugin.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -15,10 +15,10 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 3,
-  "fromUser": false
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3,
+  &quot;fromUser&quot;: false
+}</component>
   <component name="ProjectId" id="3BqNwcQJEC34AbmqD5G98mmJCoJ" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -32,11 +32,17 @@
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "git-widget-placeholder": "main",
-    "last_opened_file_path": "D:/Codes/Imervue_Plugins",
+    "last_opened_file_path": "D:/Codes/Imervue_Plugins/plugins",
     "nodejs_package_manager_path": "npm",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\Codes\Imervue_Plugins\plugins" />
+      <recent name="D:\Codes\Imervue_Plugins\languages" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -53,6 +59,7 @@
       <option name="presentableId" value="Default" />
       <updated>1775212879635</updated>
       <workItem from="1775212880682" duration="3311000" />
+      <workItem from="1775388481078" duration="131000" />
     </task>
     <servers />
   </component>
