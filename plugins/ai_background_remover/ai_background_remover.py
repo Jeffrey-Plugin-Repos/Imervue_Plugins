@@ -1,12 +1,14 @@
 """
-AI 去背插件
-AI Background Remover — remove image backgrounds using rembg (U2-Net).
+AI \u53bb\u80cc\u63d2\u4ef6
+AI Background Remover \u2014 remove image backgrounds using rembg (U2-Net).
 
 Dependencies are auto-installed on first use via the main app's pip installer.
 """
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,7 +31,33 @@ if TYPE_CHECKING:
 logger = logging.getLogger("Imervue.plugin.ai_bg_remover")
 
 # ===========================
-# 套件需求定義
+# Frozen \u74b0\u5883 DLL / \u6a21\u578b\u8def\u5f91\u4fee\u6b63
+# ===========================
+
+_PLUGIN_DIR = Path(__file__).resolve().parent
+
+# \u6a21\u578b\u5b58\u653e\u5728\u63d2\u4ef6\u76ee\u9304\u4e0b\u7684 models/\uff08\u50c5\u5728\u5be6\u969b\u4e0b\u8f09\u6642\u624d\u5efa\u7acb\uff09
+_MODELS_DIR = _PLUGIN_DIR / "models"
+os.environ["U2NET_HOME"] = str(_MODELS_DIR)
+
+# \u5728 frozen \u74b0\u5883\u4e0b\uff0connxruntime \u7684 native DLLs \u53ef\u80fd\u5728 lib/site-packages \u88e1\uff0c
+# \u9700\u8981\u52a0\u5165 DLL \u641c\u5c0b\u8def\u5f91\uff0c\u5426\u5247\u6703 ImportError / DLL load failed
+if getattr(sys, "frozen", False):
+    from Imervue.system.app_paths import app_dir as _app_dir
+    _site_packages = _app_dir() / "lib" / "site-packages"
+    if _site_packages.is_dir():
+        # Python 3.8+ \u7684 os.add_dll_directory \u53ef\u7cbe\u78ba\u52a0\u5165 DLL \u641c\u5c0b\u8def\u5f91
+        if hasattr(os, "add_dll_directory"):
+            # onnxruntime \u7684 DLLs \u901a\u5e38\u5728 onnxruntime/capi/ \u4e0b
+            _ort_capi = _site_packages / "onnxruntime" / "capi"
+            if _ort_capi.is_dir():
+                os.add_dll_directory(str(_ort_capi))
+            os.add_dll_directory(str(_site_packages))
+        # \u540c\u6642\u52a0\u5165 PATH \u4f5c\u70ba fallback
+        os.environ["PATH"] = str(_site_packages) + os.pathsep + os.environ.get("PATH", "")
+
+# ===========================
+# \u5957\u4ef6\u9700\u6c42\u5b9a\u7fa9
 # ===========================
 
 REQUIRED_PACKAGES = [
@@ -38,7 +66,7 @@ REQUIRED_PACKAGES = [
     ("onnxruntime", "onnxruntime"),
 ]
 
-# rembg 支援的模型
+# rembg \u652f\u63f4\u7684\u6a21\u578b
 MODELS = [
     "u2net",
     "u2netp",
@@ -61,11 +89,11 @@ MODEL_DESCRIPTIONS = {
 
 
 # ===========================
-# 去背 Workers
+# \u53bb\u80cc Workers
 # ===========================
 
 class _RemoveBackgroundWorker(QThread):
-    """背景執行緒處理去背"""
+    """\u80cc\u666f\u57f7\u884c\u7dd2\u8655\u7406\u53bb\u80cc"""
     progress = Signal(str)
     finished = Signal(bool, str)
 
@@ -80,6 +108,7 @@ class _RemoveBackgroundWorker(QThread):
     def run(self):
         try:
             self.progress.emit("Loading rembg...")
+            _MODELS_DIR.mkdir(parents=True, exist_ok=True)
             from rembg import remove, new_session
 
             self.progress.emit(f"Loading model: {self._model}...")
@@ -117,7 +146,7 @@ class _RemoveBackgroundWorker(QThread):
 
 
 class _BatchRemoveWorker(QThread):
-    """批次去背"""
+    """\u6279\u6b21\u53bb\u80cc"""
     progress = Signal(int, int, str)
     finished = Signal(int, int)
 
@@ -130,6 +159,7 @@ class _BatchRemoveWorker(QThread):
         self._alpha_matting = alpha_matting
 
     def run(self):
+        _MODELS_DIR.mkdir(parents=True, exist_ok=True)
         from rembg import remove, new_session
         from PIL import Image
 
@@ -176,11 +206,11 @@ class _BatchRemoveWorker(QThread):
 
 
 # ===========================
-# 對話框
+# \u5c0d\u8a71\u6846
 # ===========================
 
 class RemoveBackgroundDialog(QDialog):
-    """單張圖片去背對話框"""
+    """\u55ae\u5f35\u5716\u7247\u53bb\u80cc\u5c0d\u8a71\u6846"""
 
     def __init__(self, main_gui: GPUImageView, image_path: str):
         super().__init__(main_gui.main_window)
@@ -207,7 +237,7 @@ class RemoveBackgroundDialog(QDialog):
         self._model_combo = QComboBox()
         for m in MODELS:
             desc = MODEL_DESCRIPTIONS.get(m, "")
-            self._model_combo.addItem(f"{m}  —  {desc}", m)
+            self._model_combo.addItem(f"{m}  \u2014  {desc}", m)
         self._model_combo.setCurrentIndex(0)
         model_row.addWidget(self._model_combo, 1)
         layout.addLayout(model_row)
@@ -296,9 +326,15 @@ class RemoveBackgroundDialog(QDialog):
             if hasattr(self._gui.main_window, "toast"):
                 self._gui.main_window.toast.info(f"Error: {result}")
 
+    def closeEvent(self, event):
+        if self._worker and self._worker.isRunning():
+            self._worker.quit()
+            self._worker.wait(3000)
+        super().closeEvent(event)
+
 
 class BatchRemoveBackgroundDialog(QDialog):
-    """批次去背對話框"""
+    """\u6279\u6b21\u53bb\u80cc\u5c0d\u8a71\u6846"""
 
     def __init__(self, main_gui: GPUImageView, paths: list[str]):
         super().__init__(main_gui.main_window)
@@ -325,7 +361,7 @@ class BatchRemoveBackgroundDialog(QDialog):
         self._model_combo = QComboBox()
         for m in MODELS:
             desc = MODEL_DESCRIPTIONS.get(m, "")
-            self._model_combo.addItem(f"{m}  —  {desc}", m)
+            self._model_combo.addItem(f"{m}  \u2014  {desc}", m)
         model_row.addWidget(self._model_combo, 1)
         layout.addLayout(model_row)
 
@@ -409,19 +445,25 @@ class BatchRemoveBackgroundDialog(QDialog):
                 self._gui.main_window.toast.success(msg)
         self.accept()
 
+    def closeEvent(self, event):
+        if self._worker and self._worker.isRunning():
+            self._worker.quit()
+            self._worker.wait(3000)
+        super().closeEvent(event)
+
 
 # ===========================
-# Plugin 本體
+# Plugin \u672c\u9ad4
 # ===========================
 
 def _ensure_deps(parent, on_ready):
-    """透過主程式的 pip_installer 確認依賴"""
+    """\u900f\u904e\u4e3b\u7a0b\u5f0f\u7684 pip_installer \u78ba\u8a8d\u4f9d\u8cf4"""
     ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
 
 
 class AIBackgroundRemoverPlugin(ImervuePlugin):
     plugin_name = "AI Background Remover"
-    plugin_version = "1.0.0"
+    plugin_version = "1.1.0"
     plugin_description = "Remove image backgrounds using AI (rembg / U2-Net)"
     plugin_author = "Imervue"
 
@@ -455,7 +497,7 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
             )
             action.triggered.connect(lambda: self._remove_batch(paths))
 
-    # ----- 入口：全部經過 ensure_dependencies -----
+    # ----- \u5165\u53e3\uff1a\u5168\u90e8\u7d93\u904e ensure_dependencies -----
 
     def _open_single_dialog(self):
         images = self.viewer.model.images
