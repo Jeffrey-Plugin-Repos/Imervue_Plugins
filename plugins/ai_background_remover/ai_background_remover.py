@@ -120,7 +120,7 @@ def _subprocess_kwargs() -> dict:
 class _SubprocessRemoveWorker(QThread):
     """Runs rembg in an external Python process — safe in frozen builds."""
     progress = Signal(str)
-    finished = Signal(bool, str)
+    result_ready = Signal(bool, str)  # 不可用 finished — 會覆蓋 QThread 內建 signal
 
     def __init__(self, python: str, site_packages: str,
                  input_path: str, output_path: str,
@@ -155,29 +155,29 @@ class _SubprocessRemoveWorker(QThread):
                 if line.startswith("PROGRESS:"):
                     self.progress.emit(line[9:])
                 elif line.startswith("OK:"):
-                    self.finished.emit(True, line[3:])
+                    self.result_ready.emit(True, line[3:])
                     proc.wait()
                     return
                 elif line.startswith("ERROR:"):
-                    self.finished.emit(False, line[6:])
+                    self.result_ready.emit(False, line[6:])
                     proc.wait()
                     return
 
             proc.wait()
             if proc.returncode != 0:
-                self.finished.emit(False, f"Process exited with code {proc.returncode}")
+                self.result_ready.emit(False, f"Process exited with code {proc.returncode}")
             else:
                 # Shouldn't reach here if protocol is correct
-                self.finished.emit(True, self._output)
+                self.result_ready.emit(True, self._output)
         except Exception as exc:
             logger.error("_SubprocessRemoveWorker failed: %s", exc, exc_info=True)
-            self.finished.emit(False, str(exc))
+            self.result_ready.emit(False, str(exc))
 
 
 class _SubprocessBatchWorker(QThread):
     """Runs batch rembg in an external Python process."""
     progress = Signal(int, int, str)
-    finished = Signal(int, int)
+    result_ready = Signal(int, int)
 
     def __init__(self, python: str, site_packages: str,
                  paths: list[str], output_dir: str,
@@ -219,22 +219,22 @@ class _SubprocessBatchWorker(QThread):
                         self.progress.emit(int(parts[0]), int(parts[1]), parts[2])
                 elif line.startswith("BATCH_OK:"):
                     parts = line[9:].split(":")
-                    self.finished.emit(int(parts[0]), int(parts[1]))
+                    self.result_ready.emit(int(parts[0]), int(parts[1]))
                     proc.wait()
                     os.unlink(tmp.name)
                     return
                 elif line.startswith("ERROR:"):
-                    self.finished.emit(0, len(self._paths))
+                    self.result_ready.emit(0, len(self._paths))
                     proc.wait()
                     os.unlink(tmp.name)
                     return
 
             proc.wait()
             os.unlink(tmp.name)
-            self.finished.emit(0, len(self._paths))
+            self.result_ready.emit(0, len(self._paths))
         except Exception as exc:
             logger.error("_SubprocessBatchWorker failed: %s", exc, exc_info=True)
-            self.finished.emit(0, len(self._paths))
+            self.result_ready.emit(0, len(self._paths))
 
 
 # ===========================
@@ -243,7 +243,7 @@ class _SubprocessBatchWorker(QThread):
 
 class _RemoveBackgroundWorker(QThread):
     progress = Signal(str)
-    finished = Signal(bool, str)
+    result_ready = Signal(bool, str)
 
     def __init__(self, input_path: str, output_path: str, model_name: str,
                  alpha_matting: bool):
@@ -277,10 +277,10 @@ class _RemoveBackgroundWorker(QThread):
 
             self.progress.emit("Saving result...")
             output_img.save(self._output)
-            self.finished.emit(True, self._output)
+            self.result_ready.emit(True, self._output)
         except Exception as exc:
             logger.error("Background removal failed: %s", exc, exc_info=True)
-            self.finished.emit(False, str(exc))
+            self.result_ready.emit(False, str(exc))
 
     @staticmethod
     def _load_image(path: str):
@@ -294,7 +294,7 @@ class _RemoveBackgroundWorker(QThread):
 
 class _BatchRemoveWorker(QThread):
     progress = Signal(int, int, str)
-    finished = Signal(int, int)
+    result_ready = Signal(int, int)
 
     def __init__(self, paths: list[str], output_dir: str, model_name: str,
                  alpha_matting: bool):
@@ -348,7 +348,7 @@ class _BatchRemoveWorker(QThread):
                 logger.error("Batch bg removal failed for %s: %s", src, exc)
                 failed += 1
 
-        self.finished.emit(success, failed)
+        self.result_ready.emit(success, failed)
 
 
 # ===========================
@@ -452,7 +452,7 @@ class RemoveBackgroundDialog(QDialog):
                 self._image_path, output, model, alpha,
             )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_progress(self, msg: str):
@@ -461,7 +461,7 @@ class RemoveBackgroundDialog(QDialog):
     def _on_finished(self, success: bool, result: str):
         self._progress_bar.setVisible(False)
         self._run_btn.setEnabled(True)
-        self._worker = None
+        self._safe_cleanup_worker()
 
         if success:
             self._status_label.setText(
@@ -477,10 +477,13 @@ class RemoveBackgroundDialog(QDialog):
             if hasattr(self._gui.main_window, "toast"):
                 self._gui.main_window.toast.info(f"Error: {result}")
 
+    def _safe_cleanup_worker(self):
+        if self._worker is not None:
+            self._worker.wait(5000)  # 等待 QThread 完全結束
+            self._worker = None
+
     def closeEvent(self, event):
-        if self._worker and self._worker.isRunning():
-            self._worker.quit()
-            self._worker.wait(3000)
+        self._safe_cleanup_worker()
         super().closeEvent(event)
 
 
@@ -576,7 +579,7 @@ class BatchRemoveBackgroundDialog(QDialog):
                 self._paths, output_dir, model, alpha,
             )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_finished)
+        self._worker.result_ready.connect(self._on_finished)
         self._worker.start()
 
     def _on_progress(self, current, total, name):
@@ -586,7 +589,7 @@ class BatchRemoveBackgroundDialog(QDialog):
     def _on_finished(self, success, failed):
         self._progress.setVisible(False)
         self._run_btn.setEnabled(True)
-        self._worker = None
+        self._safe_cleanup_worker()
 
         msg = self._lang.get(
             "bg_remove_batch_done", "Processed {success}/{total} image(s)"
@@ -600,10 +603,13 @@ class BatchRemoveBackgroundDialog(QDialog):
                 self._gui.main_window.toast.success(msg)
         self.accept()
 
+    def _safe_cleanup_worker(self):
+        if self._worker is not None:
+            self._worker.wait(5000)
+            self._worker = None
+
     def closeEvent(self, event):
-        if self._worker and self._worker.isRunning():
-            self._worker.quit()
-            self._worker.wait(3000)
+        self._safe_cleanup_worker()
         super().closeEvent(event)
 
 
