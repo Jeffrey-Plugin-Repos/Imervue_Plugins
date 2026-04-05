@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/plugins/ai_background_remover/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/ai_background_remover/ai_background_remover.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/languages/spanish_language/spanish_language.py" beforeDir="false" afterPath="$PROJECT_DIR$/languages/spanish_language/spanish_language.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/png_to_icon/icon_converter_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/png_to_icon/icon_converter_plugin.py" afterDir="false" />
-    </list>
+    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -24,19 +19,19 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "D:/Codes/Imervue_Plugins/plugins",
-    "nodejs_package_manager_path": "npm",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/Codes/Imervue_Plugins/plugins&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\Codes\Imervue_Plugins\plugins" />
@@ -60,6 +55,7 @@
       <updated>1775212879635</updated>
       <workItem from="1775212880682" duration="3311000" />
       <workItem from="1775388481078" duration="131000" />
+      <workItem from="1775392928156" duration="1539000" />
     </task>
     <servers />
   </component>

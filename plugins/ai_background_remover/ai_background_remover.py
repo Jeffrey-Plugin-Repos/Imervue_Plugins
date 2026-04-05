@@ -46,14 +46,11 @@ if getattr(sys, "frozen", False):
     from Imervue.system.app_paths import app_dir as _app_dir
     _site_packages = _app_dir() / "lib" / "site-packages"
     if _site_packages.is_dir():
-        # Python 3.8+ \u7684 os.add_dll_directory \u53ef\u7cbe\u78ba\u52a0\u5165 DLL \u641c\u5c0b\u8def\u5f91
         if hasattr(os, "add_dll_directory"):
-            # onnxruntime \u7684 DLLs \u901a\u5e38\u5728 onnxruntime/capi/ \u4e0b
             _ort_capi = _site_packages / "onnxruntime" / "capi"
             if _ort_capi.is_dir():
                 os.add_dll_directory(str(_ort_capi))
             os.add_dll_directory(str(_site_packages))
-        # \u540c\u6642\u52a0\u5165 PATH \u4f5c\u70ba fallback
         os.environ["PATH"] = str(_site_packages) + os.pathsep + os.environ.get("PATH", "")
 
 # ===========================
@@ -61,12 +58,10 @@ if getattr(sys, "frozen", False):
 # ===========================
 
 REQUIRED_PACKAGES = [
-    # (import_name, pip_name)
     ("rembg", "rembg"),
     ("onnxruntime", "onnxruntime"),
 ]
 
-# rembg \u652f\u63f4\u7684\u6a21\u578b
 MODELS = [
     "u2net",
     "u2netp",
@@ -93,7 +88,6 @@ MODEL_DESCRIPTIONS = {
 # ===========================
 
 class _RemoveBackgroundWorker(QThread):
-    """\u80cc\u666f\u57f7\u884c\u7dd2\u8655\u7406\u53bb\u80cc"""
     progress = Signal(str)
     finished = Signal(bool, str)
 
@@ -146,7 +140,6 @@ class _RemoveBackgroundWorker(QThread):
 
 
 class _BatchRemoveWorker(QThread):
-    """\u6279\u6b21\u53bb\u80cc"""
     progress = Signal(int, int, str)
     finished = Signal(int, int)
 
@@ -210,7 +203,6 @@ class _BatchRemoveWorker(QThread):
 # ===========================
 
 class RemoveBackgroundDialog(QDialog):
-    """\u55ae\u5f35\u5716\u7247\u53bb\u80cc\u5c0d\u8a71\u6846"""
 
     def __init__(self, main_gui: GPUImageView, image_path: str):
         super().__init__(main_gui.main_window)
@@ -226,12 +218,10 @@ class RemoveBackgroundDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout(self)
 
-        # Source
         layout.addWidget(QLabel(
             self._lang.get("bg_remove_source", "Source:") + f"  {Path(self._image_path).name}"
         ))
 
-        # Model
         model_row = QHBoxLayout()
         model_row.addWidget(QLabel(self._lang.get("bg_remove_model", "Model:")))
         self._model_combo = QComboBox()
@@ -242,14 +232,12 @@ class RemoveBackgroundDialog(QDialog):
         model_row.addWidget(self._model_combo, 1)
         layout.addLayout(model_row)
 
-        # Alpha matting
         self._alpha_check = QCheckBox(
             self._lang.get("bg_remove_alpha_matting", "Alpha matting (smoother edges, slower)")
         )
         self._alpha_check.setChecked(False)
         layout.addWidget(self._alpha_check)
 
-        # Output path
         path_row = QHBoxLayout()
         self._path_edit = QLineEdit()
         default_out = Path(self._image_path).parent / (Path(self._image_path).stem + "_nobg.png")
@@ -260,7 +248,6 @@ class RemoveBackgroundDialog(QDialog):
         path_row.addWidget(browse_btn)
         layout.addLayout(path_row)
 
-        # Progress
         self._progress_bar = QProgressBar()
         self._progress_bar.setRange(0, 0)
         self._progress_bar.setVisible(False)
@@ -269,7 +256,6 @@ class RemoveBackgroundDialog(QDialog):
         self._status_label = QLabel("")
         layout.addWidget(self._status_label)
 
-        # Buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         cancel_btn = QPushButton(self._lang.get("export_cancel", "Cancel"))
@@ -334,7 +320,6 @@ class RemoveBackgroundDialog(QDialog):
 
 
 class BatchRemoveBackgroundDialog(QDialog):
-    """\u6279\u6b21\u53bb\u80cc\u5c0d\u8a71\u6846"""
 
     def __init__(self, main_gui: GPUImageView, paths: list[str]):
         super().__init__(main_gui.main_window)
@@ -355,7 +340,6 @@ class BatchRemoveBackgroundDialog(QDialog):
                 count=len(self._paths))
         ))
 
-        # Model
         model_row = QHBoxLayout()
         model_row.addWidget(QLabel(self._lang.get("bg_remove_model", "Model:")))
         self._model_combo = QComboBox()
@@ -365,13 +349,11 @@ class BatchRemoveBackgroundDialog(QDialog):
         model_row.addWidget(self._model_combo, 1)
         layout.addLayout(model_row)
 
-        # Alpha matting
         self._alpha_check = QCheckBox(
             self._lang.get("bg_remove_alpha_matting", "Alpha matting (smoother edges, slower)")
         )
         layout.addWidget(self._alpha_check)
 
-        # Output dir
         dir_row = QHBoxLayout()
         self._dir_edit = QLineEdit()
         if self._paths:
@@ -382,7 +364,6 @@ class BatchRemoveBackgroundDialog(QDialog):
         dir_row.addWidget(browse_btn)
         layout.addLayout(dir_row)
 
-        # Progress
         self._progress = QProgressBar()
         self._progress.setVisible(False)
         layout.addWidget(self._progress)
@@ -390,7 +371,6 @@ class BatchRemoveBackgroundDialog(QDialog):
         self._status_label = QLabel("")
         layout.addWidget(self._status_label)
 
-        # Buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         cancel_btn = QPushButton(self._lang.get("export_cancel", "Cancel"))
@@ -457,7 +437,6 @@ class BatchRemoveBackgroundDialog(QDialog):
 # ===========================
 
 def _ensure_deps(parent, on_ready):
-    """\u900f\u904e\u4e3b\u7a0b\u5f0f\u7684 pip_installer \u78ba\u8a8d\u4f9d\u8cf4"""
     ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
 
 
@@ -496,8 +475,6 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
                 lang.get("bg_remove_batch_title", "Batch AI Background Removal")
             )
             action.triggered.connect(lambda: self._remove_batch(paths))
-
-    # ----- \u5165\u53e3\uff1a\u5168\u90e8\u7d93\u904e ensure_dependencies -----
 
     def _open_single_dialog(self):
         images = self.viewer.model.images
