@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="" />
+    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -37,6 +39,9 @@
       <recent name="D:\Codes\Imervue_Plugins\plugins" />
       <recent name="D:\Codes\Imervue_Plugins\languages" />
     </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\Codes\Imervue_Plugins\plugins" />
+    </key>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
@@ -56,6 +61,8 @@
       <workItem from="1775212880682" duration="3311000" />
       <workItem from="1775388481078" duration="131000" />
       <workItem from="1775392928156" duration="1539000" />
+      <workItem from="1775402995267" duration="31000" />
+      <workItem from="1775404423721" duration="297000" />
     </task>
     <servers />
   </component>

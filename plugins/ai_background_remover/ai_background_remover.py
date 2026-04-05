@@ -35,23 +35,32 @@ logger = logging.getLogger("Imervue.plugin.ai_bg_remover")
 # ===========================
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
+logger.info("AI BG Remover: module loading, plugin dir = %s", _PLUGIN_DIR)
 
 # \u6a21\u578b\u5b58\u653e\u5728\u63d2\u4ef6\u76ee\u9304\u4e0b\u7684 models/\uff08\u50c5\u5728\u5be6\u969b\u4e0b\u8f09\u6642\u624d\u5efa\u7acb\uff09
 _MODELS_DIR = _PLUGIN_DIR / "models"
 os.environ["U2NET_HOME"] = str(_MODELS_DIR)
+logger.info("AI BG Remover: U2NET_HOME = %s", _MODELS_DIR)
 
 # \u5728 frozen \u74b0\u5883\u4e0b\uff0connxruntime \u7684 native DLLs \u53ef\u80fd\u5728 lib/site-packages \u88e1\uff0c
 # \u9700\u8981\u52a0\u5165 DLL \u641c\u5c0b\u8def\u5f91\uff0c\u5426\u5247\u6703 ImportError / DLL load failed
 if getattr(sys, "frozen", False):
-    from Imervue.system.app_paths import app_dir as _app_dir
-    _site_packages = _app_dir() / "lib" / "site-packages"
-    if _site_packages.is_dir():
-        if hasattr(os, "add_dll_directory"):
-            _ort_capi = _site_packages / "onnxruntime" / "capi"
-            if _ort_capi.is_dir():
-                os.add_dll_directory(str(_ort_capi))
-            os.add_dll_directory(str(_site_packages))
-        os.environ["PATH"] = str(_site_packages) + os.pathsep + os.environ.get("PATH", "")
+    logger.info("AI BG Remover: frozen env detected, setting up DLL paths")
+    try:
+        from Imervue.system.app_paths import app_dir as _app_dir
+        _site_packages = _app_dir() / "lib" / "site-packages"
+        logger.info("AI BG Remover: site-packages = %s, exists=%s", _site_packages, _site_packages.is_dir())
+        if _site_packages.is_dir():
+            if hasattr(os, "add_dll_directory"):
+                _ort_capi = _site_packages / "onnxruntime" / "capi"
+                if _ort_capi.is_dir():
+                    os.add_dll_directory(str(_ort_capi))
+                    logger.info("AI BG Remover: added DLL dir %s", _ort_capi)
+                os.add_dll_directory(str(_site_packages))
+                logger.info("AI BG Remover: added DLL dir %s", _site_packages)
+            os.environ["PATH"] = str(_site_packages) + os.pathsep + os.environ.get("PATH", "")
+    except Exception:
+        logger.error("AI BG Remover: frozen env setup failed", exc_info=True)
 
 # ===========================
 # \u5957\u4ef6\u9700\u6c42\u5b9a\u7fa9
@@ -437,7 +446,12 @@ class BatchRemoveBackgroundDialog(QDialog):
 # ===========================
 
 def _ensure_deps(parent, on_ready):
-    ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
+    logger.info("_ensure_deps called, parent=%s, on_ready=%s", parent, on_ready)
+    try:
+        ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
+        logger.info("_ensure_deps: ensure_dependencies returned (async started)")
+    except Exception:
+        logger.error("_ensure_deps: ensure_dependencies raised", exc_info=True)
 
 
 class AIBackgroundRemoverPlugin(ImervuePlugin):
@@ -484,12 +498,22 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
         self._remove_single(path)
 
     def _remove_single(self, path: str):
+        logger.info("_remove_single called, path=%s", path)
         if not Path(path).is_file():
+            logger.warning("_remove_single: path is not a file, aborting")
             return
-        _ensure_deps(
-            self.main_window,
-            lambda: RemoveBackgroundDialog(self.viewer, path).exec(),
-        )
+
+        def _on_ready():
+            logger.info("_remove_single on_ready callback fired, opening dialog")
+            try:
+                dlg = RemoveBackgroundDialog(self.viewer, path)
+                logger.info("_remove_single: dialog created, calling exec()")
+                dlg.exec()
+                logger.info("_remove_single: dialog exec() returned")
+            except Exception:
+                logger.error("_remove_single: dialog failed", exc_info=True)
+
+        _ensure_deps(self.main_window, _on_ready)
 
     def _open_batch_dialog(self):
         if (self.viewer.tile_grid_mode and self.viewer.tile_selection_mode
@@ -501,10 +525,19 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
             self._remove_batch(paths)
 
     def _remove_batch(self, paths: list[str]):
-        _ensure_deps(
-            self.main_window,
-            lambda: BatchRemoveBackgroundDialog(self.viewer, paths).exec(),
-        )
+        logger.info("_remove_batch called, %d paths", len(paths))
+
+        def _on_ready():
+            logger.info("_remove_batch on_ready callback fired, opening dialog")
+            try:
+                dlg = BatchRemoveBackgroundDialog(self.viewer, paths)
+                logger.info("_remove_batch: dialog created, calling exec()")
+                dlg.exec()
+                logger.info("_remove_batch: dialog exec() returned")
+            except Exception:
+                logger.error("_remove_batch: dialog failed", exc_info=True)
+
+        _ensure_deps(self.main_window, _on_ready)
 
     def get_translations(self) -> dict[str, dict[str, str]]:
         return {
