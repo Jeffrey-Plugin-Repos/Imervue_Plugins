@@ -6,9 +6,12 @@ Dependencies are auto-installed on first use via the main app's pip installer.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,6 +25,7 @@ from PySide6.QtWidgets import (
 from Imervue.plugin.plugin_base import ImervuePlugin
 from Imervue.plugin.pip_installer import ensure_dependencies
 from Imervue.multi_language.language_wrapper import language_wrapper
+from Imervue.system.app_paths import is_frozen as _is_frozen
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QMenuBar
@@ -30,48 +34,40 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Imervue.plugin.ai_bg_remover")
 
-# 設定檔案名稱、編碼、層級與格式
+# \u8a2d\u5b9a\u6a94\u6848\u540d\u7a31\u3001\u7de8\u78bc\u3001\u5c64\u7d1a\u8207\u683c\u5f0f
 logging.basicConfig(
-    filename='ai_bg_remover.log',      # 檔案名稱
-    filemode='w',            # 'a' 附加 (預設), 'w' 覆寫
+    filename='ai_bg_remover.log',
+    filemode='w',
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO       # 設定最低記錄層級
+    level=logging.INFO,
 )
 
 # ===========================
-# Frozen \u74b0\u5883 DLL / \u6a21\u578b\u8def\u5f91\u4fee\u6b63
+# \u8def\u5f91
 # ===========================
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
+_RUNNER_SCRIPT = _PLUGIN_DIR / "_rembg_runner.py"
 logger.info("AI BG Remover: module loading, plugin dir = %s", _PLUGIN_DIR)
 
-# \u6a21\u578b\u5b58\u653e\u5728\u63d2\u4ef6\u76ee\u9304\u4e0b\u7684 models/\uff08\u50c5\u5728\u5be6\u969b\u4e0b\u8f09\u6642\u624d\u5efa\u7acb\uff09
+# \u6a21\u578b\u5b58\u653e\u5728\u63d2\u4ef6\u76ee\u9304\u4e0b\u7684 models/
 _MODELS_DIR = _PLUGIN_DIR / "models"
 os.environ["U2NET_HOME"] = str(_MODELS_DIR)
 logger.info("AI BG Remover: U2NET_HOME = %s", _MODELS_DIR)
 
-# \u5728 frozen \u74b0\u5883\u4e0b\uff0connxruntime \u7684 native DLLs \u53ef\u80fd\u5728 lib/site-packages \u88e1\uff0c
-# \u9700\u8981\u52a0\u5165 DLL \u641c\u5c0b\u8def\u5f91\uff0c\u5426\u5247\u6703 ImportError / DLL load failed
-if getattr(sys, "frozen", False):
-    logger.info("AI BG Remover: frozen env detected, setting up DLL paths")
+# Frozen \u74b0\u5883 DLL \u8def\u5f91\u8a2d\u5b9a\uff08\u50c5\u4f9b\u975e subprocess \u6a21\u5f0f\u4f7f\u7528\uff09
+if _is_frozen():
+    logger.info("AI BG Remover: frozen env detected")
     try:
         from Imervue.system.app_paths import app_dir as _app_dir
         _site_packages = _app_dir() / "lib" / "site-packages"
-        logger.info("AI BG Remover: site-packages = %s, exists=%s", _site_packages, _site_packages.is_dir())
-        if _site_packages.is_dir():
-            if hasattr(os, "add_dll_directory"):
-                _ort_capi = _site_packages / "onnxruntime" / "capi"
-                if _ort_capi.is_dir():
-                    os.add_dll_directory(str(_ort_capi))
-                    logger.info("AI BG Remover: added DLL dir %s", _ort_capi)
-                os.add_dll_directory(str(_site_packages))
-                logger.info("AI BG Remover: added DLL dir %s", _site_packages)
-            os.environ["PATH"] = str(_site_packages) + os.pathsep + os.environ.get("PATH", "")
+        logger.info("AI BG Remover: site-packages = %s, exists=%s",
+                     _site_packages, _site_packages.is_dir())
     except Exception:
         logger.error("AI BG Remover: frozen env setup failed", exc_info=True)
 
 # ===========================
-# \u5957\u4ef6\u9700\u6c42\u5b9a\u7fa9
+# \u5957\u4ef6\u9700\u6c42
 # ===========================
 
 REQUIRED_PACKAGES = [
@@ -80,13 +76,8 @@ REQUIRED_PACKAGES = [
 ]
 
 MODELS = [
-    "u2net",
-    "u2netp",
-    "u2net_human_seg",
-    "u2net_cloth_seg",
-    "silueta",
-    "isnet-general-use",
-    "isnet-anime",
+    "u2net", "u2netp", "u2net_human_seg", "u2net_cloth_seg",
+    "silueta", "isnet-general-use", "isnet-anime",
 ]
 
 MODEL_DESCRIPTIONS = {
@@ -101,27 +92,146 @@ MODEL_DESCRIPTIONS = {
 
 
 # ===========================
-# Main-thread pre-import
+# Python \u641c\u5c0b\uff08\u51cd\u7d50\u74b0\u5883\u7528\uff09
 # ===========================
 
-def _preimport_rembg() -> bool:
-    """在主執行緒預先 import rembg/onnxruntime（載入 native DLL）。
+def _find_external_python() -> str | None:
+    """Find the external Python used by pip_installer (cached)."""
+    from Imervue.plugin.pip_installer import _find_python
+    return _find_python()
 
-    PyInstaller 凍結環境下，在背景 QThread import 含 native DLL 的套件
-    會導致 segfault。先在主執行緒 import 一次後，背景執行緒就能安全使用。
-    """
-    try:
-        logger.info("_preimport_rembg: importing rembg on main thread...")
-        import rembg  # noqa: F401  — triggers onnxruntime DLL load
-        logger.info("_preimport_rembg: success")
-        return True
-    except Exception:
-        logger.error("_preimport_rembg: failed", exc_info=True)
-        return False
+
+def _subprocess_kwargs() -> dict:
+    """subprocess \u5171\u7528\u53c3\u6578"""
+    kw: dict = {
+        "stdin": subprocess.DEVNULL,
+        "encoding": "utf-8",
+        "errors": "replace",
+    }
+    if sys.platform == "win32":
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return kw
 
 
 # ===========================
-# \u53bb\u80cc Workers
+# Subprocess Workers (\u51cd\u7d50\u74b0\u5883)
+# ===========================
+
+class _SubprocessRemoveWorker(QThread):
+    """Runs rembg in an external Python process — safe in frozen builds."""
+    progress = Signal(str)
+    finished = Signal(bool, str)
+
+    def __init__(self, python: str, input_path: str, output_path: str,
+                 model_name: str, alpha_matting: bool):
+        super().__init__()
+        self._python = python
+        self._input = input_path
+        self._output = output_path
+        self._model = model_name
+        self._alpha_matting = alpha_matting
+
+    def run(self):
+        try:
+            logger.info("_SubprocessRemoveWorker: starting, python=%s", self._python)
+            cmd = [
+                self._python, str(_RUNNER_SCRIPT), "single",
+                self._input, self._output, self._model,
+                str(self._alpha_matting), str(_MODELS_DIR),
+            ]
+            kw = _subprocess_kwargs()
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kw,
+            )
+            for line in proc.stdout:
+                line = line.rstrip("\n\r")
+                if not line:
+                    continue
+                logger.info("_SubprocessRemoveWorker: %s", line)
+                if line.startswith("PROGRESS:"):
+                    self.progress.emit(line[9:])
+                elif line.startswith("OK:"):
+                    self.finished.emit(True, line[3:])
+                    proc.wait()
+                    return
+                elif line.startswith("ERROR:"):
+                    self.finished.emit(False, line[6:])
+                    proc.wait()
+                    return
+
+            proc.wait()
+            if proc.returncode != 0:
+                self.finished.emit(False, f"Process exited with code {proc.returncode}")
+            else:
+                # Shouldn't reach here if protocol is correct
+                self.finished.emit(True, self._output)
+        except Exception as exc:
+            logger.error("_SubprocessRemoveWorker failed: %s", exc, exc_info=True)
+            self.finished.emit(False, str(exc))
+
+
+class _SubprocessBatchWorker(QThread):
+    """Runs batch rembg in an external Python process."""
+    progress = Signal(int, int, str)
+    finished = Signal(int, int)
+
+    def __init__(self, python: str, paths: list[str], output_dir: str,
+                 model_name: str, alpha_matting: bool):
+        super().__init__()
+        self._python = python
+        self._paths = paths
+        self._output_dir = output_dir
+        self._model = model_name
+        self._alpha_matting = alpha_matting
+
+    def run(self):
+        try:
+            # Write paths to temp file
+            tmp = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False, encoding="utf-8",
+            )
+            json.dump(self._paths, tmp)
+            tmp.close()
+
+            cmd = [
+                self._python, str(_RUNNER_SCRIPT), "batch",
+                tmp.name, self._output_dir, self._model,
+                str(self._alpha_matting), str(_MODELS_DIR),
+            ]
+            kw = _subprocess_kwargs()
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kw,
+            )
+            for line in proc.stdout:
+                line = line.rstrip("\n\r")
+                if not line:
+                    continue
+                if line.startswith("BATCH_PROGRESS:"):
+                    parts = line[15:].split(":", 2)
+                    if len(parts) == 3:
+                        self.progress.emit(int(parts[0]), int(parts[1]), parts[2])
+                elif line.startswith("BATCH_OK:"):
+                    parts = line[9:].split(":")
+                    self.finished.emit(int(parts[0]), int(parts[1]))
+                    proc.wait()
+                    os.unlink(tmp.name)
+                    return
+                elif line.startswith("ERROR:"):
+                    self.finished.emit(0, len(self._paths))
+                    proc.wait()
+                    os.unlink(tmp.name)
+                    return
+
+            proc.wait()
+            os.unlink(tmp.name)
+            self.finished.emit(0, len(self._paths))
+        except Exception as exc:
+            logger.error("_SubprocessBatchWorker failed: %s", exc, exc_info=True)
+            self.finished.emit(0, len(self._paths))
+
+
+# ===========================
+# In-process Workers (\u958b\u767c\u74b0\u5883)
 # ===========================
 
 class _RemoveBackgroundWorker(QThread):
@@ -138,15 +248,12 @@ class _RemoveBackgroundWorker(QThread):
 
     def run(self):
         try:
-            logger.info("_RemoveBackgroundWorker.run() started")
             self.progress.emit("Loading rembg...")
             _MODELS_DIR.mkdir(parents=True, exist_ok=True)
             from rembg import remove, new_session
-            logger.info("_RemoveBackgroundWorker: rembg imported OK")
 
             self.progress.emit(f"Loading model: {self._model}...")
             session = new_session(self._model)
-            logger.info("_RemoveBackgroundWorker: model loaded")
 
             self.progress.emit("Processing image...")
             from PIL import Image
@@ -163,8 +270,6 @@ class _RemoveBackgroundWorker(QThread):
 
             self.progress.emit("Saving result...")
             output_img.save(self._output)
-            logger.info("_RemoveBackgroundWorker: done, saved to %s", self._output)
-
             self.finished.emit(True, self._output)
         except Exception as exc:
             logger.error("Background removal failed: %s", exc, exc_info=True)
@@ -233,7 +338,7 @@ class _BatchRemoveWorker(QThread):
                 output_img.save(str(out_path))
                 success += 1
             except Exception as exc:
-                logger.error(f"Batch bg removal failed for {src}: {exc}")
+                logger.error("Batch bg removal failed for %s: %s", src, exc)
                 failed += 1
 
         self.finished.emit(success, failed)
@@ -245,12 +350,14 @@ class _BatchRemoveWorker(QThread):
 
 class RemoveBackgroundDialog(QDialog):
 
-    def __init__(self, main_gui: GPUImageView, image_path: str):
+    def __init__(self, main_gui: GPUImageView, image_path: str,
+                 external_python: str | None = None):
         super().__init__(main_gui.main_window)
         self._gui = main_gui
         self._image_path = image_path
         self._lang = language_wrapper.language_word_dict
         self._worker = None
+        self._external_python = external_python
 
         self.setWindowTitle(self._lang.get("bg_remove_title", "AI Background Removal"))
         self.setMinimumWidth(480)
@@ -324,9 +431,18 @@ class RemoveBackgroundDialog(QDialog):
         self._progress_bar.setVisible(True)
 
         model = self._model_combo.currentData()
-        self._worker = _RemoveBackgroundWorker(
-            self._image_path, output, model, self._alpha_check.isChecked()
-        )
+        alpha = self._alpha_check.isChecked()
+
+        if self._external_python:
+            # Frozen: use subprocess
+            self._worker = _SubprocessRemoveWorker(
+                self._external_python, self._image_path, output, model, alpha,
+            )
+        else:
+            # Dev: use in-process
+            self._worker = _RemoveBackgroundWorker(
+                self._image_path, output, model, alpha,
+            )
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
@@ -362,12 +478,14 @@ class RemoveBackgroundDialog(QDialog):
 
 class BatchRemoveBackgroundDialog(QDialog):
 
-    def __init__(self, main_gui: GPUImageView, paths: list[str]):
+    def __init__(self, main_gui: GPUImageView, paths: list[str],
+                 external_python: str | None = None):
         super().__init__(main_gui.main_window)
         self._gui = main_gui
         self._paths = paths
         self._lang = language_wrapper.language_word_dict
         self._worker = None
+        self._external_python = external_python
 
         self.setWindowTitle(self._lang.get("bg_remove_batch_title", "Batch AI Background Removal"))
         self.setMinimumWidth(480)
@@ -438,9 +556,16 @@ class BatchRemoveBackgroundDialog(QDialog):
         self._progress.setValue(0)
 
         model = self._model_combo.currentData()
-        self._worker = _BatchRemoveWorker(
-            self._paths, output_dir, model, self._alpha_check.isChecked()
-        )
+        alpha = self._alpha_check.isChecked()
+
+        if self._external_python:
+            self._worker = _SubprocessBatchWorker(
+                self._external_python, self._paths, output_dir, model, alpha,
+            )
+        else:
+            self._worker = _BatchRemoveWorker(
+                self._paths, output_dir, model, alpha,
+            )
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.start()
@@ -478,7 +603,7 @@ class BatchRemoveBackgroundDialog(QDialog):
 # ===========================
 
 def _ensure_deps(parent, on_ready):
-    logger.info("_ensure_deps called, parent=%s, on_ready=%s", parent, on_ready)
+    logger.info("_ensure_deps called")
     try:
         ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
         logger.info("_ensure_deps: ensure_dependencies returned (async started)")
@@ -488,7 +613,7 @@ def _ensure_deps(parent, on_ready):
 
 class AIBackgroundRemoverPlugin(ImervuePlugin):
     plugin_name = "AI Background Remover"
-    plugin_version = "1.1.0"
+    plugin_version = "1.2.0"
     plugin_description = "Remove image backgrounds using AI (rembg / U2-Net)"
     plugin_author = "Imervue"
 
@@ -522,6 +647,14 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
             )
             action.triggered.connect(lambda: self._remove_batch(paths))
 
+    def _get_external_python(self) -> str | None:
+        """In frozen mode, find the external Python. Returns None in dev mode."""
+        if not _is_frozen():
+            return None
+        python = _find_external_python()
+        logger.info("External python for subprocess: %s", python)
+        return python
+
     def _open_single_dialog(self):
         images = self.viewer.model.images
         if not images or self.viewer.current_index >= len(images):
@@ -532,23 +665,18 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
     def _remove_single(self, path: str):
         logger.info("_remove_single called, path=%s", path)
         if not Path(path).is_file():
-            logger.warning("_remove_single: path is not a file, aborting")
             return
 
         def _on_ready():
-            logger.info("_remove_single on_ready callback fired")
+            logger.info("_remove_single on_ready fired")
             try:
-                # 在主執行緒預先 import rembg（含 onnxruntime native DLL），
-                # 避免在背景 QThread import 導致凍結環境 segfault
-                if not _preimport_rembg():
-                    logger.error("_remove_single: preimport failed, aborting")
-                    return
-                dlg = RemoveBackgroundDialog(self.viewer, path)
+                python = self._get_external_python()
+                dlg = RemoveBackgroundDialog(self.viewer, path, external_python=python)
                 logger.info("_remove_single: dialog created, calling exec()")
                 dlg.exec()
                 logger.info("_remove_single: dialog exec() returned")
             except Exception:
-                logger.error("_remove_single: dialog failed", exc_info=True)
+                logger.error("_remove_single: failed", exc_info=True)
 
         _ensure_deps(self.main_window, _on_ready)
 
@@ -565,17 +693,15 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
         logger.info("_remove_batch called, %d paths", len(paths))
 
         def _on_ready():
-            logger.info("_remove_batch on_ready callback fired")
+            logger.info("_remove_batch on_ready fired")
             try:
-                if not _preimport_rembg():
-                    logger.error("_remove_batch: preimport failed, aborting")
-                    return
-                dlg = BatchRemoveBackgroundDialog(self.viewer, paths)
+                python = self._get_external_python()
+                dlg = BatchRemoveBackgroundDialog(self.viewer, paths, external_python=python)
                 logger.info("_remove_batch: dialog created, calling exec()")
                 dlg.exec()
                 logger.info("_remove_batch: dialog exec() returned")
             except Exception:
-                logger.error("_remove_batch: dialog failed", exc_info=True)
+                logger.error("_remove_batch: failed", exc_info=True)
 
         _ensure_deps(self.main_window, _on_ready)
 
