@@ -30,6 +30,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Imervue.plugin.ai_bg_remover")
 
+# 設定檔案名稱、編碼、層級與格式
+logging.basicConfig(
+    filename='ai_bg_remover.log',      # 檔案名稱
+    filemode='w',            # 'a' 附加 (預設), 'w' 覆寫
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO       # 設定最低記錄層級
+)
+
 # ===========================
 # Frozen \u74b0\u5883 DLL / \u6a21\u578b\u8def\u5f91\u4fee\u6b63
 # ===========================
