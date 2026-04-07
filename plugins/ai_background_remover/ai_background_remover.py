@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QFileDialog, QLineEdit, QProgressBar,
@@ -120,7 +120,7 @@ def _subprocess_kwargs() -> dict:
 class _SubprocessRemoveWorker(QThread):
     """Runs rembg in an external Python process — safe in frozen builds."""
     progress = Signal(str)
-    result_ready = Signal(bool, str)  # 不可用 finished — 會覆蓋 QThread 內建 signal
+    result_ready = Signal(bool, str)
 
     def __init__(self, python: str, site_packages: str,
                  input_path: str, output_path: str,
@@ -453,15 +453,18 @@ class RemoveBackgroundDialog(QDialog):
             )
         self._worker.progress.connect(self._on_progress)
         self._worker.result_ready.connect(self._on_finished)
+        self._worker.finished.connect(self._cleanup_worker)
         self._worker.start()
 
     def _on_progress(self, msg: str):
         self._status_label.setText(msg)
 
+    def _cleanup_worker(self):
+        self._worker = None
+
     def _on_finished(self, success: bool, result: str):
         self._progress_bar.setVisible(False)
         self._run_btn.setEnabled(True)
-        self._safe_cleanup_worker()
 
         if success:
             self._status_label.setText(
@@ -471,19 +474,16 @@ class RemoveBackgroundDialog(QDialog):
                 self._gui.main_window.toast.success(
                     self._lang.get("bg_remove_done_short", "Background removed!")
                 )
-            self.accept()
+            QTimer.singleShot(0, self.accept)
         else:
             self._status_label.setText(f"Error: {result}")
             if hasattr(self._gui.main_window, "toast"):
                 self._gui.main_window.toast.info(f"Error: {result}")
 
-    def _safe_cleanup_worker(self):
-        if self._worker is not None:
-            self._worker.wait(5000)  # 等待 QThread 完全結束
-            self._worker = None
-
     def closeEvent(self, event):
-        self._safe_cleanup_worker()
+        if self._worker and self._worker.isRunning():
+            self._worker.wait(5000)
+            self._worker = None
         super().closeEvent(event)
 
 
@@ -580,16 +580,19 @@ class BatchRemoveBackgroundDialog(QDialog):
             )
         self._worker.progress.connect(self._on_progress)
         self._worker.result_ready.connect(self._on_finished)
+        self._worker.finished.connect(self._cleanup_worker)
         self._worker.start()
 
     def _on_progress(self, current, total, name):
         self._progress.setValue(current)
         self._status_label.setText(f"{current}/{total}  {name}")
 
+    def _cleanup_worker(self):
+        self._worker = None
+
     def _on_finished(self, success, failed):
         self._progress.setVisible(False)
         self._run_btn.setEnabled(True)
-        self._safe_cleanup_worker()
 
         msg = self._lang.get(
             "bg_remove_batch_done", "Processed {success}/{total} image(s)"
@@ -601,15 +604,12 @@ class BatchRemoveBackgroundDialog(QDialog):
                 self._gui.main_window.toast.info(msg)
             else:
                 self._gui.main_window.toast.success(msg)
-        self.accept()
-
-    def _safe_cleanup_worker(self):
-        if self._worker is not None:
-            self._worker.wait(5000)
-            self._worker = None
+        QTimer.singleShot(0, self.accept)
 
     def closeEvent(self, event):
-        self._safe_cleanup_worker()
+        if self._worker and self._worker.isRunning():
+            self._worker.wait(5000)
+            self._worker = None
         super().closeEvent(event)
 
 
@@ -632,9 +632,9 @@ class AIBackgroundRemoverPlugin(ImervuePlugin):
     plugin_description = "Remove image backgrounds using AI (rembg / U2-Net)"
     plugin_author = "Imervue"
 
-    def on_build_menu_bar(self, menu_bar: QMenuBar) -> None:
+    def on_build_menu_bar(self, plugin_menu) -> None:
         lang = language_wrapper.language_word_dict
-        self._menu = menu_bar.addMenu(lang.get("bg_remove_menu", "AI Tools"))
+        self._menu = plugin_menu.addMenu(lang.get("bg_remove_menu", "AI Tools"))
 
         action = self._menu.addAction(lang.get("bg_remove_title", "AI Background Removal"))
         action.triggered.connect(self._open_single_dialog)

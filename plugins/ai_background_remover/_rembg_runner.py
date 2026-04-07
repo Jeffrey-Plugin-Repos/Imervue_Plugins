@@ -88,7 +88,7 @@ def _run_batch(input_list_file: str, output_dir: str, model_name: str,
             output_img.save(str(out_path))
             success += 1
         except Exception as exc:
-            print(f"PROGRESS:Error processing {Path(src).name}: {exc}", flush=True)
+            print(f"BATCH_PROGRESS:{i}:{total}:Error: {Path(src).name}: {exc}", flush=True)
             failed += 1
 
     print(f"BATCH_OK:{success}:{failed}", flush=True)

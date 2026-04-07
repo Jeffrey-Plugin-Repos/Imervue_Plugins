@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QFileDialog, QLineEdit, QProgressBar,
@@ -389,7 +390,9 @@ class ObjectSplitterDialog(QDialog):
             self._status_label.setText(msg)
             if hasattr(self._gui.main_window, "toast"):
                 self._gui.main_window.toast.success(msg)
-            self.accept()
+            # Defer accept so QThread built-in `finished` signal is processed
+            # before the dialog is destroyed (avoids use-after-free crash).
+            QTimer.singleShot(0, self.accept)
         else:
             self._status_label.setText(f"Error: {result}")
             if hasattr(self._gui.main_window, "toast"):
