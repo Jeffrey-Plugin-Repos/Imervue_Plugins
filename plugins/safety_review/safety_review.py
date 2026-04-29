@@ -69,61 +69,113 @@ _RUNNER_SCRIPT = _PLUGIN_DIR / "_runner.py"
 # ---------------------------------------------------------------------------
 MODE_REAL = "real"
 MODE_ANIME = "anime"
+MODE_AUTO = "auto"
 
 # ---------------------------------------------------------------------------
-# NudeNet labels
+# NudeNet labels (real-photo mode)
 # ---------------------------------------------------------------------------
-# Real-photo mode — only exposed genitalia / anus
 MOSAIC_LABELS = frozenset({
     "FEMALE_GENITALIA_EXPOSED",
     "MALE_GENITALIA_EXPOSED",
     "ANUS_EXPOSED",
 })
 
-# Anime mode — also include "covered" variants because NudeNet often
-# classifies stylised/drawn genitalia as partially covered.
-MOSAIC_LABELS_ANIME = frozenset({
-    "FEMALE_GENITALIA_EXPOSED",
-    "FEMALE_GENITALIA_COVERED",
-    "MALE_GENITALIA_EXPOSED",
-    "ANUS_EXPOSED",
-    "ANUS_COVERED",
-})
+# ---------------------------------------------------------------------------
+# EraX-Anti-NSFW labels (anime mode) — YOLO11 classes
+# ---------------------------------------------------------------------------
+# Classes: 0=anus, 1=make_love, 2=nipple, 3=penis, 4=vagina
+# We mosaic: anus, penis, vagina.  Skip nipple & make_love.
+ANIME_MOSAIC_CLASSES = frozenset({0, 3, 4})   # anus, penis, vagina
 
-# SKIP these explicitly — nipples & breasts (both male and female)
-# Listed for clarity; we simply don't include them in MOSAIC_LABELS.
-_SKIP_LABELS = frozenset({
-    "FEMALE_BREAST_EXPOSED",
-    "FEMALE_BREAST_COVERED",
-    "MALE_BREAST_EXPOSED",
-    "MALE_BREAST_COVERED",
-})
+_ERAX_REPO = "erax-ai/EraX-Anti-NSFW-V1.1"
+_ERAX_MODEL = "erax-anti-nsfw-yolo11m-v1.1.pt"   # medium — best accuracy
 
-REQUIRED_PACKAGES = [
+# ---------------------------------------------------------------------------
+# Packages per mode
+# ---------------------------------------------------------------------------
+REQUIRED_PACKAGES_REAL = [
     ("nudenet", "nudenet"),
     ("onnxruntime", "onnxruntime"),
+]
+REQUIRED_PACKAGES_ANIME = [
+    ("ultralytics", "ultralytics"),
+    ("huggingface_hub", "huggingface_hub"),
 ]
 
 DEFAULT_BLOCK_SIZE = 4   # mosaic granularity — 4 px
 
 # Per-mode defaults
+# padding = fixed pixels, expand_pct = expand box by % of its own size
 _MODE_DEFAULTS: dict[str, dict] = {
-    MODE_REAL:  {"confidence": 0.25, "padding": 10},
-    MODE_ANIME: {"confidence": 0.15, "padding": 20},
+    MODE_REAL:  {"confidence": 0.25, "padding": 10, "expand_pct": 0},
+    MODE_ANIME: {"confidence": 0.20, "padding": 0,  "expand_pct": 0},
+    MODE_AUTO:  {"confidence": 0.25, "padding": 10, "expand_pct": 0},
 }
 
 DEFAULT_PADDING = 10
+DEFAULT_EXPAND_PCT = 0     # 0 = use fixed padding only
 MIN_CONFIDENCE = 0.25
+
+# ---------------------------------------------------------------------------
+# Censoring styles
+# ---------------------------------------------------------------------------
+STYLE_MOSAIC = "mosaic"
+STYLE_BLUR = "blur"
+STYLE_BLACK = "black"
+
+# ---------------------------------------------------------------------------
+# Abstract detection categories → per-mode labels / class IDs
+# ---------------------------------------------------------------------------
+CAT_GENITALIA = "genitalia"
+CAT_ANUS = "anus"
+CAT_NIPPLE = "nipple"
+CAT_SEXUAL_ACT = "sexual_act"
+
+ALL_CATEGORIES = (CAT_GENITALIA, CAT_ANUS, CAT_NIPPLE, CAT_SEXUAL_ACT)
+DEFAULT_CATEGORIES = frozenset({CAT_GENITALIA, CAT_ANUS})
+
+_CAT_TO_REAL_LABELS: dict[str, frozenset[str]] = {
+    CAT_GENITALIA: frozenset({"FEMALE_GENITALIA_EXPOSED", "MALE_GENITALIA_EXPOSED"}),
+    CAT_ANUS: frozenset({"ANUS_EXPOSED"}),
+    CAT_NIPPLE: frozenset({"FEMALE_BREAST_EXPOSED"}),
+    CAT_SEXUAL_ACT: frozenset(),  # NudeNet has no "sexual act" label
+}
+
+_CAT_TO_ANIME_CLASSES: dict[str, frozenset[int]] = {
+    CAT_GENITALIA: frozenset({3, 4}),   # penis, vagina
+    CAT_ANUS: frozenset({0}),
+    CAT_NIPPLE: frozenset({2}),
+    CAT_SEXUAL_ACT: frozenset({1}),     # make_love
+}
+
+
+def _categories_to_real_labels(categories) -> frozenset[str]:
+    """Convert abstract category set → NudeNet label set."""
+    if categories is None:
+        categories = DEFAULT_CATEGORIES
+    labels: set[str] = set()
+    for cat in categories:
+        labels |= _CAT_TO_REAL_LABELS.get(cat, frozenset())
+    return frozenset(labels)
+
+
+def _categories_to_anime_classes(categories) -> frozenset[int]:
+    """Convert abstract category set → EraX YOLO class-ID set."""
+    if categories is None:
+        categories = DEFAULT_CATEGORIES
+    classes: set[int] = set()
+    for cat in categories:
+        classes |= _CAT_TO_ANIME_CLASSES.get(cat, frozenset())
+    return frozenset(classes)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Cached detector — NudeNet model loading is expensive (~2-5 s).
-# Reuse across single / batch / scan-all within the same process.
 import threading as _threading
 
+# Cached NudeNet detector (real-photo mode)
 _cached_detector = None
 _cached_detector_lock = _threading.Lock()
 
@@ -138,8 +190,33 @@ def _get_detector():
         return _cached_detector
 
 
-def _labels_for_mode(mode: str) -> frozenset[str]:
-    return MOSAIC_LABELS_ANIME if mode == MODE_ANIME else MOSAIC_LABELS
+# Cached EraX YOLO model (anime mode)
+_cached_anime_model = None
+_cached_anime_lock = _threading.Lock()
+
+
+def _get_anime_model():
+    """Return a cached EraX YOLO model, downloading on first call."""
+    global _cached_anime_model
+    with _cached_anime_lock:
+        if _cached_anime_model is None:
+            from huggingface_hub import hf_hub_download
+            from ultralytics import YOLO
+            model_path = hf_hub_download(
+                repo_id=_ERAX_REPO, filename=_ERAX_MODEL)
+            _cached_anime_model = YOLO(model_path)
+        return _cached_anime_model
+
+
+def _detect_image_mode(src: str) -> str:
+    """Heuristic: anime/illustration images have fewer unique quantized colors."""
+    from PIL import Image
+    img = Image.open(src).convert("RGB")
+    img = img.resize((128, 128), Image.Resampling.BILINEAR)
+    quantized = set()
+    for r, g, b in img.getdata():
+        quantized.add((r >> 3, g >> 3, b >> 3))
+    return MODE_ANIME if len(quantized) < 1500 else MODE_REAL
 
 
 def _find_external_python() -> str | None:
@@ -166,27 +243,87 @@ _FMT_MAP = {
 }
 
 
-def _mosaic_region(img, x1, y1, x2, y2, block_size, _bilinear=None, _nearest=None):
-    """Apply mosaic to a rectangular region of a PIL Image (in-place)."""
+def _censor_region(img, x1, y1, x2, y2, block_size,
+                   style=STYLE_MOSAIC, _bilinear=None, _nearest=None):
+    """Apply censoring (mosaic / blur / black) to a region (in-place)."""
     w = x2 - x1
     h = y2 - y1
     if w <= 0 or h <= 0:
         return
-    # Lazy-cache resampling enums to avoid repeated attribute lookups
-    if _bilinear is None:
-        from PIL import Image as _Img
-        _mosaic_region.__defaults__ = (
-            _Img.Resampling.BILINEAR, _Img.Resampling.NEAREST,
+    if style == STYLE_BLACK:
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((x1, y1, x2, y2), fill=(0, 0, 0))
+    elif style == STYLE_BLUR:
+        from PIL import ImageFilter
+        region = img.crop((x1, y1, x2, y2))
+        radius = max(max(w, h) // 5, 10)
+        blurred = region.filter(ImageFilter.GaussianBlur(radius=radius))
+        img.paste(blurred, (x1, y1))
+    else:  # mosaic (default)
+        if _bilinear is None:
+            from PIL import Image as _Img
+            _censor_region.__defaults__ = (
+                STYLE_MOSAIC,
+                _Img.Resampling.BILINEAR, _Img.Resampling.NEAREST,
+            )
+            _bilinear = _censor_region.__defaults__[1]
+            _nearest = _censor_region.__defaults__[2]
+        region = img.crop((x1, y1, x2, y2))
+        bs = max(2, block_size)
+        small = region.resize(
+            (max(1, w // bs), max(1, h // bs)), resample=_bilinear,
         )
-        _bilinear = _mosaic_region.__defaults__[0]
-        _nearest = _mosaic_region.__defaults__[1]
-    region = img.crop((x1, y1, x2, y2))
-    bs = max(2, block_size)
-    small = region.resize(
-        (max(1, w // bs), max(1, h // bs)), resample=_bilinear,
-    )
-    mosaic = small.resize((w, h), resample=_nearest)
-    img.paste(mosaic, (x1, y1))
+        mosaic = small.resize((w, h), resample=_nearest)
+        img.paste(mosaic, (x1, y1))
+
+
+def _expand_box(x1, y1, x2, y2, padding: int, expand_pct: int,
+                 iw: int, ih: int):
+    """Expand a bounding box by fixed padding AND/OR percentage of box size."""
+    bw = x2 - x1
+    bh = y2 - y1
+    # Percentage-based expansion (% of the box's own size)
+    if expand_pct > 0:
+        ex = int(bw * expand_pct / 100)
+        ey = int(bh * expand_pct / 100)
+        x1 -= ex
+        y1 -= ey
+        x2 += ex
+        y2 += ey
+    # Fixed-pixel padding (additive)
+    if padding > 0:
+        x1 -= padding
+        y1 -= padding
+        x2 += padding
+        y2 += padding
+    return max(0, x1), max(0, y1), min(iw, x2), min(ih, y2)
+
+
+def _detect_regions_real(detector, src: str, confidence: float,
+                          labels: frozenset[str]):
+    """NudeNet detection → list of (x1, y1, x2, y2)."""
+    detections = detector.detect(src)
+    boxes = []
+    for d in detections:
+        if d["class"] in labels and d["score"] >= confidence:
+            boxes.append(tuple(d["box"]))
+    return boxes
+
+
+def _detect_regions_anime(src: str, confidence: float,
+                           classes: frozenset[int] = ANIME_MOSAIC_CLASSES):
+    """EraX YOLO11 detection → list of (x1, y1, x2, y2)."""
+    model = _get_anime_model()
+    results = model(src, conf=confidence, iou=0.3, verbose=False)
+    boxes = []
+    for r in results:
+        for box in r.boxes:
+            cls_id = int(box.cls[0])
+            if cls_id in classes:
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                boxes.append((int(x1), int(y1), int(x2), int(y2)))
+    return boxes
 
 
 def _process_single_image(
@@ -196,18 +333,26 @@ def _process_single_image(
     block_size: int,
     padding: int,
     confidence: float = MIN_CONFIDENCE,
-    labels: frozenset[str] = MOSAIC_LABELS,
+    expand_pct: int = 0,
+    mode: str = MODE_REAL,
+    style: str = STYLE_MOSAIC,
+    categories=None,
 ) -> int:
-    """Detect + mosaic one image.  Returns the number of regions mosaiced."""
+    """Detect + censor one image.  Returns the number of regions processed."""
     from PIL import Image
 
-    detections = detector.detect(src)
-    regions = [
-        d for d in detections
-        if d["class"] in labels and d["score"] >= confidence
-    ]
-    if not regions:
-        # Nothing to mosaic — copy only when src != dst
+    actual_mode = mode
+    if mode == MODE_AUTO:
+        actual_mode = _detect_image_mode(src)
+
+    if actual_mode == MODE_ANIME:
+        classes = _categories_to_anime_classes(categories)
+        boxes = _detect_regions_anime(src, confidence, classes)
+    else:
+        real_labels = _categories_to_real_labels(categories)
+        boxes = _detect_regions_real(detector, src, confidence, real_labels)
+
+    if not boxes:
         if os.path.normpath(src) != os.path.normpath(dst):
             import shutil
             shutil.copy2(src, dst)
@@ -218,20 +363,16 @@ def _process_single_image(
         img = img.convert("RGBA")
 
     iw, ih = img.width, img.height
-    for d in regions:
-        x1, y1, x2, y2 = d["box"]
-        if padding > 0:
-            x1 = max(0, x1 - padding)
-            y1 = max(0, y1 - padding)
-            x2 = min(iw, x2 + padding)
-            y2 = min(ih, y2 + padding)
-        _mosaic_region(img, x1, y1, x2, y2, block_size)
+    for x1, y1, x2, y2 in boxes:
+        x1, y1, x2, y2 = _expand_box(x1, y1, x2, y2, padding, expand_pct,
+                                       iw, ih)
+        _censor_region(img, x1, y1, x2, y2, block_size, style=style)
 
     fmt = _FMT_MAP.get(Path(dst).suffix.lower(), "PNG")
     if fmt == "JPEG" and img.mode == "RGBA":
         img = img.convert("RGB")
     img.save(dst, format=fmt)
-    return len(regions)
+    return len(boxes)
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +389,9 @@ class _SingleWorker(QThread):
 
     def __init__(self, input_path: str, output_path: str,
                  block_size: int, padding: int,
-                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE):
+                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE,
+                 expand_pct: int = 0, style: str = STYLE_MOSAIC,
+                 categories=None):
         super().__init__()
         self._input = input_path
         self._output = output_path
@@ -256,15 +399,27 @@ class _SingleWorker(QThread):
         self._pad = padding
         self._mode = mode
         self._conf = confidence
+        self._expand_pct = expand_pct
+        self._style = style
+        self._categories = categories
 
     def run(self):
         try:
-            self.progress.emit(0, "Loading NudeNet model...")
-            detector = _get_detector()
+            self.progress.emit(0, "Loading model...")
+            if self._mode == MODE_AUTO:
+                _get_detector()  # pre-load both
+                _get_anime_model()
+                detector = _get_detector()
+            elif self._mode == MODE_ANIME:
+                detector = None
+            else:
+                detector = _get_detector()
             self.progress.emit(1, "Detecting regions...")
             count = _process_single_image(
                 detector, self._input, self._output, self._bs, self._pad,
-                confidence=self._conf, labels=_labels_for_mode(self._mode),
+                confidence=self._conf,
+                expand_pct=self._expand_pct, mode=self._mode,
+                style=self._style, categories=self._categories,
             )
             self.progress.emit(2, "Saving...")
             self.progress.emit(3, "Done")
@@ -282,7 +437,9 @@ class _BatchWorker(QThread):
 
     def __init__(self, paths: list[str], output_dir: str | None,
                  block_size: int, padding: int, overwrite: bool,
-                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE):
+                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE,
+                 expand_pct: int = 0, style: str = STYLE_MOSAIC,
+                 categories=None):
         super().__init__()
         self._paths = paths
         self._output_dir = output_dir
@@ -291,12 +448,20 @@ class _BatchWorker(QThread):
         self._overwrite = overwrite
         self._mode = mode
         self._conf = confidence
+        self._expand_pct = expand_pct
+        self._style = style
+        self._categories = categories
 
     def run(self):
         import time
 
-        detector = _get_detector()
-        labels = _labels_for_mode(self._mode)
+        if self._mode == MODE_AUTO:
+            detector = _get_detector()
+            _get_anime_model()
+        elif self._mode == MODE_ANIME:
+            detector = None
+        else:
+            detector = _get_detector()
         success = 0
         failed = 0
         total_regions = 0
@@ -328,7 +493,9 @@ class _BatchWorker(QThread):
 
                 count = _process_single_image(
                     detector, src, dst, self._bs, self._pad,
-                    confidence=self._conf, labels=labels,
+                    confidence=self._conf,
+                    expand_pct=self._expand_pct, mode=self._mode,
+                    style=self._style, categories=self._categories,
                 )
                 total_regions += count
                 success += 1
@@ -347,7 +514,9 @@ class _SubprocessSingleWorker(QThread):
     def __init__(self, python: str, site_packages: str,
                  input_path: str, output_path: str,
                  block_size: int, padding: int,
-                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE):
+                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE,
+                 expand_pct: int = 0, style: str = STYLE_MOSAIC,
+                 categories=None):
         super().__init__()
         self._python = python
         self._sp = site_packages
@@ -357,15 +526,21 @@ class _SubprocessSingleWorker(QThread):
         self._pad = padding
         self._mode = mode
         self._conf = confidence
+        self._expand_pct = expand_pct
+        self._style = style
+        self._categories = categories
 
     def run(self):
         try:
+            cats_str = ",".join(sorted(self._categories)) if self._categories else ""
             cmd = [
                 self._python, str(_RUNNER_SCRIPT),
                 self._sp, "single",
                 self._input, self._output,
                 str(self._bs), str(self._pad),
                 self._mode, str(self._conf),
+                str(self._expand_pct),
+                self._style, cats_str,
             ]
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -404,7 +579,9 @@ class _SubprocessBatchWorker(QThread):
     def __init__(self, python: str, site_packages: str,
                  paths: list[str], output_dir: str | None,
                  block_size: int, padding: int, overwrite: bool,
-                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE):
+                 mode: str = MODE_REAL, confidence: float = MIN_CONFIDENCE,
+                 expand_pct: int = 0, style: str = STYLE_MOSAIC,
+                 categories=None):
         super().__init__()
         self._python = python
         self._sp = site_packages
@@ -415,6 +592,9 @@ class _SubprocessBatchWorker(QThread):
         self._overwrite = overwrite
         self._mode = mode
         self._conf = confidence
+        self._expand_pct = expand_pct
+        self._style = style
+        self._categories = categories
 
     def run(self):
         tmp_path = None
@@ -426,6 +606,7 @@ class _SubprocessBatchWorker(QThread):
             json.dump(self._paths, tmp)
             tmp.close()
 
+            cats_str = ",".join(sorted(self._categories)) if self._categories else ""
             cmd = [
                 self._python, str(_RUNNER_SCRIPT),
                 self._sp, "batch",
@@ -433,6 +614,8 @@ class _SubprocessBatchWorker(QThread):
                 str(self._bs), str(self._pad),
                 str(self._overwrite),
                 self._mode, str(self._conf),
+                str(self._expand_pct),
+                self._style, cats_str,
             ]
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -483,15 +666,21 @@ class _SubprocessBatchWorker(QThread):
 # Shared UI helper
 # ---------------------------------------------------------------------------
 
-def _build_mode_row(layout, lang) -> tuple[QComboBox, QDoubleSpinBox]:
-    """Add detection-mode combo + confidence spinner to *layout*.
-    Returns (mode_combo, confidence_spin).
+def _build_mode_row(layout, lang):
+    """Add detection-mode combo, style combo, confidence, expand%,
+    and category checkboxes to *layout*.
+
+    Returns (mode_combo, conf_spin, expand_spin, style_combo, cat_checks).
+    ``cat_checks`` is a dict  {category_name: QCheckBox}.
     """
+    # -- Detection mode --
     mode_row = QHBoxLayout()
     mode_row.addWidget(QLabel(
         lang.get("safety_review_mode", "Detection mode:")
     ))
     mode_combo = QComboBox()
+    mode_combo.addItem(
+        lang.get("safety_review_mode_auto", "Auto"), MODE_AUTO)
     mode_combo.addItem(
         lang.get("safety_review_mode_real", "Real Photo"), MODE_REAL)
     mode_combo.addItem(
@@ -499,25 +688,86 @@ def _build_mode_row(layout, lang) -> tuple[QComboBox, QDoubleSpinBox]:
     mode_row.addWidget(mode_combo, 1)
     layout.addLayout(mode_row)
 
+    # -- Censor style --
+    style_row = QHBoxLayout()
+    style_row.addWidget(QLabel(
+        lang.get("safety_review_style", "Censor style:")
+    ))
+    style_combo = QComboBox()
+    style_combo.addItem(
+        lang.get("safety_review_style_mosaic", "Mosaic"), STYLE_MOSAIC)
+    style_combo.addItem(
+        lang.get("safety_review_style_blur", "Gaussian Blur"), STYLE_BLUR)
+    style_combo.addItem(
+        lang.get("safety_review_style_black", "Black Bar"), STYLE_BLACK)
+    style_row.addWidget(style_combo, 1)
+    layout.addLayout(style_row)
+
+    # -- Confidence --
     conf_row = QHBoxLayout()
     conf_row.addWidget(QLabel(
         lang.get("safety_review_confidence", "Min confidence:")
     ))
     conf_spin = QDoubleSpinBox()
-    conf_spin.setRange(0.05, 1.0)
+    conf_spin.setRange(0.01, 1.0)
     conf_spin.setSingleStep(0.05)
     conf_spin.setDecimals(2)
-    conf_spin.setValue(_MODE_DEFAULTS[MODE_REAL]["confidence"])
+    conf_spin.setValue(_MODE_DEFAULTS[MODE_AUTO]["confidence"])
     conf_row.addWidget(conf_spin)
     layout.addLayout(conf_row)
+
+    # -- Expand % --
+    expand_row = QHBoxLayout()
+    expand_row.addWidget(QLabel(
+        lang.get("safety_review_expand_pct",
+                  "Expand detection box (%):")
+    ))
+    expand_spin = QSpinBox()
+    expand_spin.setRange(0, 200)
+    expand_spin.setSingleStep(10)
+    expand_spin.setValue(_MODE_DEFAULTS[MODE_AUTO]["expand_pct"])
+    expand_spin.setSuffix("%")
+    expand_row.addWidget(expand_spin)
+    layout.addLayout(expand_row)
+
+    # -- Category checkboxes --
+    cat_label = QLabel(
+        lang.get("safety_review_categories", "Detection categories:"))
+    layout.addWidget(cat_label)
+
+    _cat_display = {
+        CAT_GENITALIA: lang.get("safety_review_cat_genitalia",
+                                "Genitalia (penis / vagina)"),
+        CAT_ANUS: lang.get("safety_review_cat_anus", "Anus"),
+        CAT_NIPPLE: lang.get("safety_review_cat_nipple", "Nipple / Breast"),
+        CAT_SEXUAL_ACT: lang.get("safety_review_cat_sexual_act",
+                                  "Sexual Act (anime only)"),
+    }
+    cat_checks: dict[str, QCheckBox] = {}
+    cat_row = QHBoxLayout()
+    for cat in ALL_CATEGORIES:
+        cb = QCheckBox(_cat_display[cat])
+        cb.setChecked(cat in DEFAULT_CATEGORIES)
+        cat_checks[cat] = cb
+        cat_row.addWidget(cb)
+    layout.addLayout(cat_row)
 
     def _on_mode_changed(index):
         mode = mode_combo.itemData(index)
         defaults = _MODE_DEFAULTS.get(mode, _MODE_DEFAULTS[MODE_REAL])
         conf_spin.setValue(defaults["confidence"])
+        expand_spin.setValue(defaults["expand_pct"])
+        # Sexual-act checkbox only relevant for anime / auto
+        sa_cb = cat_checks[CAT_SEXUAL_ACT]
+        sa_cb.setEnabled(mode != MODE_REAL)
+        if mode == MODE_REAL:
+            sa_cb.setChecked(False)
 
     mode_combo.currentIndexChanged.connect(_on_mode_changed)
-    return mode_combo, conf_spin
+    # Trigger initial state
+    _on_mode_changed(mode_combo.currentIndex())
+
+    return mode_combo, conf_spin, expand_spin, style_combo, cat_checks
 
 
 # ---------------------------------------------------------------------------
@@ -625,8 +875,9 @@ class ScanAllDialog(QDialog):
         out_row.addWidget(self._out_browse_btn)
         layout.addLayout(out_row)
 
-        # Mode + confidence
-        self._mode_combo, self._conf_spin = _build_mode_row(
+        # Mode + style + confidence + categories
+        (self._mode_combo, self._conf_spin, self._expand_spin,
+         self._style_combo, self._cat_checks) = _build_mode_row(
             layout, self._lang)
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
@@ -722,12 +973,21 @@ class ScanAllDialog(QDialog):
 
         mode = self._mode_combo.currentData()
         conf = self._conf_spin.value()
+        expand = self._expand_spin.value()
+        style = self._style_combo.currentData()
+        categories = frozenset(
+            cat for cat, cb in self._cat_checks.items() if cb.isChecked()
+        )
 
         self._start_btn.setEnabled(False)
         self._browse_folder_btn.setEnabled(False)
         self._mode_combo.setEnabled(False)
         self._conf_spin.setEnabled(False)
+        self._expand_spin.setEnabled(False)
+        self._style_combo.setEnabled(False)
         self._overwrite_check.setEnabled(False)
+        for cb in self._cat_checks.values():
+            cb.setEnabled(False)
 
         self._status_label.setText(
             self._lang.get("safety_review_installing",
@@ -744,20 +1004,22 @@ class ScanAllDialog(QDialog):
                 self._worker = _SubprocessBatchWorker(
                     python, sp, self._paths, output_dir,
                     self._block_size, self._padding, overwrite=overwrite,
-                    mode=mode, confidence=conf,
+                    mode=mode, confidence=conf, expand_pct=expand,
+                    style=style, categories=categories,
                 )
             else:
                 self._worker = _BatchWorker(
                     self._paths, output_dir,
                     self._block_size, self._padding, overwrite=overwrite,
-                    mode=mode, confidence=conf,
+                    mode=mode, confidence=conf, expand_pct=expand,
+                    style=style, categories=categories,
                 )
             self._worker.progress.connect(self._on_progress)
             self._worker.result_ready.connect(self._on_finished)
             self._worker.finished.connect(self._cleanup)
             self._worker.start()
 
-        _ensure_deps(self._gui.main_window, _on_deps_ready)
+        _ensure_deps(self._gui.main_window, _on_deps_ready, mode=mode)
 
     def _on_progress(self, current, total, name, *time_args):
         self._progress.setValue(current)
@@ -875,8 +1137,9 @@ class SafetyReviewDialog(QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        # Mode + confidence
-        self._mode_combo, self._conf_spin = _build_mode_row(
+        # Mode + style + confidence + categories
+        (self._mode_combo, self._conf_spin, self._expand_spin,
+         self._style_combo, self._cat_checks) = _build_mode_row(
             layout, self._lang)
         self._mode_combo.currentIndexChanged.connect(
             self._on_mode_changed_single)
@@ -983,6 +1246,11 @@ class SafetyReviewDialog(QDialog):
         pad = self._padding_spin.value()
         mode = self._mode_combo.currentData()
         conf = self._conf_spin.value()
+        expand = self._expand_spin.value()
+        style = self._style_combo.currentData()
+        categories = frozenset(
+            cat for cat, cb in self._cat_checks.items() if cb.isChecked()
+        )
 
         def _on_deps_ready():
             self._progress_bar.setVisible(True)
@@ -993,20 +1261,22 @@ class SafetyReviewDialog(QDialog):
                 python, sp = frozen_env
                 self._worker = _SubprocessSingleWorker(
                     python, sp, self._image_path, output, bs, pad,
-                    mode=mode, confidence=conf,
+                    mode=mode, confidence=conf, expand_pct=expand,
+                    style=style, categories=categories,
                 )
                 self._worker.progress.connect(self._on_progress_text)
             else:
                 self._worker = _SingleWorker(
                     self._image_path, output, bs, pad,
-                    mode=mode, confidence=conf,
+                    mode=mode, confidence=conf, expand_pct=expand,
+                    style=style, categories=categories,
                 )
                 self._worker.progress.connect(self._on_progress_step)
             self._worker.result_ready.connect(self._on_finished)
             self._worker.finished.connect(self._cleanup)
             self._worker.start()
 
-        _ensure_deps(self._gui.main_window, _on_deps_ready)
+        _ensure_deps(self._gui.main_window, _on_deps_ready, mode=mode)
 
     def _on_progress_step(self, step: int, msg: str):
         """From _SingleWorker (int, str)."""
@@ -1104,8 +1374,9 @@ class BatchSafetyReviewDialog(QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        # Mode + confidence
-        self._mode_combo, self._conf_spin = _build_mode_row(
+        # Mode + style + confidence + categories
+        (self._mode_combo, self._conf_spin, self._expand_spin,
+         self._style_combo, self._cat_checks) = _build_mode_row(
             layout, self._lang)
         self._mode_combo.currentIndexChanged.connect(
             self._on_mode_changed_batch)
@@ -1216,6 +1487,11 @@ class BatchSafetyReviewDialog(QDialog):
         pad = self._padding_spin.value()
         mode = self._mode_combo.currentData()
         conf = self._conf_spin.value()
+        expand = self._expand_spin.value()
+        style = self._style_combo.currentData()
+        categories = frozenset(
+            cat for cat, cb in self._cat_checks.items() if cb.isChecked()
+        )
 
         def _on_deps_ready():
             self._progress.setVisible(True)
@@ -1228,19 +1504,21 @@ class BatchSafetyReviewDialog(QDialog):
                 python, sp = frozen_env
                 self._worker = _SubprocessBatchWorker(
                     python, sp, self._paths, output_dir, bs, pad, overwrite,
-                    mode=mode, confidence=conf,
+                    mode=mode, confidence=conf, expand_pct=expand,
+                    style=style, categories=categories,
                 )
             else:
                 self._worker = _BatchWorker(
                     self._paths, output_dir, bs, pad, overwrite,
-                    mode=mode, confidence=conf,
+                    mode=mode, confidence=conf, expand_pct=expand,
+                    style=style, categories=categories,
                 )
             self._worker.progress.connect(self._on_progress)
             self._worker.result_ready.connect(self._on_finished)
             self._worker.finished.connect(self._cleanup)
             self._worker.start()
 
-        _ensure_deps(self._gui.main_window, _on_deps_ready)
+        _ensure_deps(self._gui.main_window, _on_deps_ready, mode=mode)
 
     def _on_progress(self, current, total, name, *time_args):
         self._progress.setValue(current)
@@ -1322,9 +1600,20 @@ class BatchSafetyReviewDialog(QDialog):
 # Plugin
 # ---------------------------------------------------------------------------
 
-def _ensure_deps(parent, on_ready):
+REQUIRED_PACKAGES_AUTO = REQUIRED_PACKAGES_REAL + [
+    p for p in REQUIRED_PACKAGES_ANIME if p not in REQUIRED_PACKAGES_REAL
+]
+
+
+def _ensure_deps(parent, on_ready, mode: str = MODE_REAL):
+    if mode == MODE_AUTO:
+        pkgs = REQUIRED_PACKAGES_AUTO
+    elif mode == MODE_ANIME:
+        pkgs = REQUIRED_PACKAGES_ANIME
+    else:
+        pkgs = REQUIRED_PACKAGES_REAL
     try:
-        ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
+        ensure_dependencies(parent, pkgs, on_ready)
     except Exception:
         logger.error("ensure_dependencies raised", exc_info=True)
 
@@ -1527,9 +1816,20 @@ class SafetyReviewPlugin(ImervuePlugin):
                 "safety_review_confidence": "Min confidence:",
                 "safety_review_start": "Start",
                 "safety_review_installing": "Installing dependencies...",
+                "safety_review_expand_pct": "Expand detection box (%):",
                 "safety_review_scan_folder": "Source folder:",
                 "safety_review_scan_folder_hint":
                     "Choose a folder to scan for images",
+                "safety_review_mode_auto": "Auto-detect",
+                "safety_review_style": "Censor style:",
+                "safety_review_style_mosaic": "Mosaic",
+                "safety_review_style_blur": "Gaussian Blur",
+                "safety_review_style_black": "Black Bar",
+                "safety_review_categories": "Detection categories:",
+                "safety_review_cat_genitalia": "Genitalia (penis / vagina)",
+                "safety_review_cat_anus": "Anus",
+                "safety_review_cat_nipple": "Nipple / Breast",
+                "safety_review_cat_sexual_act": "Sexual Act (anime only)",
             },
             "Traditional_Chinese": {
                 "safety_review_title":
@@ -1590,9 +1890,20 @@ class SafetyReviewPlugin(ImervuePlugin):
                 "safety_review_confidence": "\u6700\u4f4e\u4fe1\u5fc3\u5ea6\uff1a",
                 "safety_review_start": "\u958b\u59cb",
                 "safety_review_installing": "\u6b63\u5728\u5b89\u88dd\u76f8\u4f9d\u5957\u4ef6\u2026",
+                "safety_review_expand_pct": "\u5075\u6e2c\u6846\u64f4\u5f35 (%)\uff1a",
                 "safety_review_scan_folder": "\u4f86\u6e90\u8cc7\u6599\u593e\uff1a",
                 "safety_review_scan_folder_hint":
                     "\u9078\u64c7\u8981\u6383\u63cf\u7684\u8cc7\u6599\u593e",
+                "safety_review_mode_auto": "\u81ea\u52d5\u5224\u65b7",
+                "safety_review_style": "\u6253\u78bc\u6a23\u5f0f\uff1a",
+                "safety_review_style_mosaic": "\u99ac\u8cfd\u514b",
+                "safety_review_style_blur": "\u9ad8\u65af\u6a21\u7cca",
+                "safety_review_style_black": "\u9ed1\u689d\u906e\u64cb",
+                "safety_review_categories": "\u5075\u6e2c\u985e\u5225\uff1a",
+                "safety_review_cat_genitalia": "\u751f\u6b96\u5668 (\u9670\u8396 / \u9670\u9053)",
+                "safety_review_cat_anus": "\u809b\u9580",
+                "safety_review_cat_nipple": "\u4e73\u982d / \u4e73\u623f",
+                "safety_review_cat_sexual_act": "\u6027\u884c\u70ba (\u50c5\u52d5\u756b)",
             },
             "Chinese": {
                 "safety_review_title":
@@ -1653,9 +1964,20 @@ class SafetyReviewPlugin(ImervuePlugin):
                 "safety_review_confidence": "\u6700\u4f4e\u7f6e\u4fe1\u5ea6\uff1a",
                 "safety_review_start": "\u5f00\u59cb",
                 "safety_review_installing": "\u6b63\u5728\u5b89\u88c5\u4f9d\u8d56\u5305\u2026",
+                "safety_review_expand_pct": "\u68c0\u6d4b\u6846\u6269\u5f20 (%)\uff1a",
                 "safety_review_scan_folder": "\u6e90\u6587\u4ef6\u5939\uff1a",
                 "safety_review_scan_folder_hint":
                     "\u9009\u62e9\u8981\u626b\u63cf\u7684\u6587\u4ef6\u5939",
+                "safety_review_mode_auto": "\u81ea\u52a8\u5224\u65ad",
+                "safety_review_style": "\u6253\u7801\u6837\u5f0f\uff1a",
+                "safety_review_style_mosaic": "\u9a6c\u8d5b\u514b",
+                "safety_review_style_blur": "\u9ad8\u65af\u6a21\u7cca",
+                "safety_review_style_black": "\u9ed1\u6761\u906e\u6321",
+                "safety_review_categories": "\u68c0\u6d4b\u7c7b\u522b\uff1a",
+                "safety_review_cat_genitalia": "\u751f\u6b96\u5668 (\u9634\u830e / \u9634\u9053)",
+                "safety_review_cat_anus": "\u809b\u95e8",
+                "safety_review_cat_nipple": "\u4e73\u5934 / \u4e73\u623f",
+                "safety_review_cat_sexual_act": "\u6027\u884c\u4e3a (\u4ec5\u52a8\u6f2b)",
             },
             "Japanese": {
                 "safety_review_title":
@@ -1718,9 +2040,21 @@ class SafetyReviewPlugin(ImervuePlugin):
                 "safety_review_start": "\u958b\u59cb",
                 "safety_review_installing":
                     "\u4f9d\u5b58\u30d1\u30c3\u30b1\u30fc\u30b8\u3092\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb\u4e2d\u2026",
+                "safety_review_expand_pct":
+                    "\u691c\u51fa\u30dc\u30c3\u30af\u30b9\u62e1\u5f35 (%)\uff1a",
                 "safety_review_scan_folder": "\u30bd\u30fc\u30b9\u30d5\u30a9\u30eb\u30c0\uff1a",
                 "safety_review_scan_folder_hint":
                     "\u30b9\u30ad\u30e3\u30f3\u3059\u308b\u30d5\u30a9\u30eb\u30c0\u3092\u9078\u629e",
+                "safety_review_mode_auto": "\u81ea\u52d5\u5224\u5b9a",
+                "safety_review_style": "\u30e2\u30b6\u30a4\u30af\u30b9\u30bf\u30a4\u30eb\uff1a",
+                "safety_review_style_mosaic": "\u30e2\u30b6\u30a4\u30af",
+                "safety_review_style_blur": "\u30ac\u30a6\u30b7\u30a2\u30f3\u30d6\u30e9\u30fc",
+                "safety_review_style_black": "\u9ed2\u30d0\u30fc",
+                "safety_review_categories": "\u691c\u51fa\u30ab\u30c6\u30b4\u30ea\uff1a",
+                "safety_review_cat_genitalia": "\u6027\u5668 (\u30da\u30cb\u30b9 / \u30f4\u30a1\u30ae\u30ca)",
+                "safety_review_cat_anus": "\u808b\u9580",
+                "safety_review_cat_nipple": "\u4e73\u9996 / \u4e73\u623f",
+                "safety_review_cat_sexual_act": "\u6027\u884c\u70ba (\u30a2\u30cb\u30e1\u306e\u307f)",
             },
             "Korean": {
                 "safety_review_title":
@@ -1783,8 +2117,20 @@ class SafetyReviewPlugin(ImervuePlugin):
                 "safety_review_start": "\uc2dc\uc791",
                 "safety_review_installing":
                     "\uc758\uc874\uc131 \ud328\ud0a4\uc9c0 \uc124\uce58 \uc911\u2026",
+                "safety_review_expand_pct":
+                    "\uac10\uc9c0 \ubc15\uc2a4 \ud655\uc7a5 (%)\uff1a",
                 "safety_review_scan_folder": "\uc18c\uc2a4 \ud3f4\ub354:",
                 "safety_review_scan_folder_hint":
                     "\uc2a4\ucafc\ud560 \ud3f4\ub354\ub97c \uc120\ud0dd\ud558\uc138\uc694",
+                "safety_review_mode_auto": "\uc790\ub3d9 \uac10\uc9c0",
+                "safety_review_style": "\ubaa8\uc790\uc774\ud06c \uc2a4\ud0c0\uc77c:",
+                "safety_review_style_mosaic": "\ubaa8\uc790\uc774\ud06c",
+                "safety_review_style_blur": "\uac00\uc6b0\uc2dc\uc548 \ube14\ub7ec",
+                "safety_review_style_black": "\uac80\uc740 \ub9c9\ub300",
+                "safety_review_categories": "\uac10\uc9c0 \uce74\ud14c\uace0\ub9ac:",
+                "safety_review_cat_genitalia": "\uc131\uae30 (\uc74c\uacbd / \uc9c8)",
+                "safety_review_cat_anus": "\ud56d\ubb38",
+                "safety_review_cat_nipple": "\uc720\ub450 / \uc720\ubc29",
+                "safety_review_cat_sexual_act": "\uc131\ud589\uc704 (\uc560\ub2c8\uba54\uc774\uc158\ub9cc)",
             },
         }

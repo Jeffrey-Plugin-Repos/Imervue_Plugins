@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="" />
+    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/plugins/safety_review/_runner.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/safety_review/_runner.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/plugins/safety_review/safety_review.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/safety_review/safety_review.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -27,6 +31,7 @@
     &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
     &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;D:/Codes/Imervue_Plugins/plugins&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
@@ -45,8 +50,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-3bd3a6803838-JavaScript-PY-261.22158.340" />
-        <option value="bundled-python-sdk-b63d5a1f7c97-b61e75351b1f-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-261.22158.340" />
+        <option value="bundled-js-predefined-d6986cc7102b-31caf2ab9e3c-JavaScript-PY-261.23567.174" />
+        <option value="bundled-python-sdk-024ed6589d45-c2ffad84badb-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-261.23567.174" />
       </set>
     </attachedChunks>
   </component>
@@ -65,6 +70,10 @@
       <workItem from="1775407757890" duration="3705000" />
       <workItem from="1775458615017" duration="714000" />
       <workItem from="1775546055794" duration="1835000" />
+      <workItem from="1776064428687" duration="280000" />
+      <workItem from="1776067682875" duration="929000" />
+      <workItem from="1776079354167" duration="2227000" />
+      <workItem from="1777474967215" duration="2305000" />
     </task>
     <servers />
   </component>
