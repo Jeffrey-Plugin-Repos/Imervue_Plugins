@@ -1,17 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/ai_background_remover/ai_background_remover.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/ai_background_remover/ai_background_remover.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/ai_colorize/ai_colorize_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/ai_colorize/ai_colorize_plugin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/ai_denoise/ai_denoise_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/ai_denoise/ai_denoise_plugin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/ai_motion_deblur/ai_motion_deblur_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/ai_motion_deblur/ai_motion_deblur_plugin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/ai_portrait_relight/ai_portrait_relight_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/ai_portrait_relight/ai_portrait_relight_plugin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/ai_style_transfer/ai_style_transfer_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/ai_style_transfer/ai_style_transfer_plugin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/object_splitter/object_splitter.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/object_splitter/object_splitter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugins/spanish_translation/spanish.py" beforeDir="false" afterPath="$PROJECT_DIR$/plugins/spanish_translation/spanish.py" afterDir="false" />
-    </list>
+    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -80,6 +70,7 @@
       <workItem from="1776067682875" duration="929000" />
       <workItem from="1776079354167" duration="2227000" />
       <workItem from="1777474967215" duration="5911000" />
+      <workItem from="1777634367510" duration="17000" />
     </task>
     <servers />
   </component>
