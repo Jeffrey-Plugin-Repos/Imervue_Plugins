@@ -1,43 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/FORMAT.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/auto_mesh.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/auto_rig.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/canvas.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/clip_masks.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/cubism_import.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/deformers.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/document.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/document_io.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/expression_dock.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/face_landmark_mapper.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/hit_test.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/idle_driver.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/input_drivers.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/input_engine.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/mesh_edit.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/motion_dock.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/motion_player.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/motion_recorder.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/motion_sampler.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/motion_timeline.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/operations.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/parameter_dock.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/physics.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/psd_import.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/puppet_plugin.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/recorder.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/render_prep.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/runtime.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/standard_params.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/vts_api.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/webcam_tracker.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/plugins/puppet/workspace.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-    </list>
+    <list default="true" id="f9ab2174-407c-4771-a4f6-594019143fe4" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -118,6 +82,7 @@
       <workItem from="1777647268135" duration="1350000" />
       <workItem from="1778213256854" duration="60000" />
       <workItem from="1778579612368" duration="17000" />
+      <workItem from="1778650459539" duration="14000" />
     </task>
     <servers />
   </component>
