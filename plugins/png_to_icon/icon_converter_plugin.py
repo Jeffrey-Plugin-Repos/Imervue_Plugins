@@ -2,7 +2,8 @@
 PNG to Icon Converter Plugin
 Convert PNG images into multi-size .ico and .png icon files.
 
-Requires Pillow — auto-installed on first use via the main app's pip installer.
+Pillow is part of the main program's default dependency set, so the plugin
+needs no extra install step.
 """
 from __future__ import annotations
 
@@ -10,32 +11,57 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QMessageBox, QFileDialog
+from PIL import Image
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from Imervue.plugin.plugin_base import ImervuePlugin
-from Imervue.plugin.pip_installer import ensure_dependencies
 from Imervue.multi_language.language_wrapper import language_wrapper
+from Imervue.plugin.plugin_base import ImervuePlugin
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QMenu, QMenuBar
+
     from Imervue.gpu_image_view.gpu_image_view import GPUImageView
 
 logger = logging.getLogger("Imervue.plugin.png_to_icon")
 
-REQUIRED_PACKAGES = [
-    ("PIL", "Pillow"),
-]
-
-SIZES = [16, 32, 48, 64, 128, 256]
+SIZES = (16, 32, 48, 64, 128, 256)
+OUTPUT_DIR_NAME = "icons"
 
 
-def _ensure_deps(parent, on_ready):
-    ensure_dependencies(parent, REQUIRED_PACKAGES, on_ready)
+def icon_output_dir(source: str | Path) -> Path:
+    """Return the directory the icon set for ``source`` is written to."""
+    return Path(source).parent / OUTPUT_DIR_NAME
+
+
+def write_icon_set(source: str | Path, sizes: tuple[int, ...] = SIZES) -> list[Path]:
+    """Write one square PNG and one ICO per size next to ``source``.
+
+    Returns the written paths in size order (PNG before ICO for each size).
+    Raises ``ValueError`` for an empty or non-positive size list and lets
+    Pillow's ``OSError`` through for an unreadable source.
+    """
+    if not sizes or any(size <= 0 for size in sizes):
+        raise ValueError(f"icon sizes must be positive, got {sizes!r}")
+    with Image.open(source) as opened:
+        image = opened.convert("RGBA")
+    output_dir = icon_output_dir(source)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for size in sizes:
+        resized = image.resize((size, size), Image.Resampling.LANCZOS)
+        png_path = output_dir / f"icon_{size}x{size}.png"
+        ico_path = output_dir / f"icon_{size}x{size}.ico"
+        resized.save(png_path)
+        resized.save(ico_path, format="ICO", sizes=[(size, size)])
+        written.extend((png_path, ico_path))
+    return written
 
 
 class IconConverterPlugin(ImervuePlugin):
+    """Menu and context-menu entries that turn a PNG into an icon set."""
+
     plugin_name = "PNG to Icon Converter"
-    plugin_version = "1.5.0"
+    plugin_version = "1.6.0"
     plugin_description = "Convert PNG images into multi-size icons"
     plugin_author = "JE Chen"
 
@@ -51,23 +77,23 @@ class IconConverterPlugin(ImervuePlugin):
         menu = menu_bar.addMenu(lang.get("icon_tools_menu", "Icon Tools"))
 
         action = menu.addAction(lang.get("convert_current", "Convert Current Image to Icon"))
-        action.triggered.connect(self._convert_current_guarded)
+        action.triggered.connect(self._convert_current)
 
         action2 = menu.addAction(lang.get("select_png", "Select PNG to Convert"))
-        action2.triggered.connect(self._select_and_convert_guarded)
+        action2.triggered.connect(self._select_and_convert)
 
     def on_build_context_menu(self, menu: QMenu, viewer: GPUImageView) -> None:
         if not viewer.deep_zoom:
             return
         lang = self._lang()
         action = menu.addAction(lang.get("context_convert", "Convert to Icon"))
-        action.triggered.connect(self._convert_current_guarded)
+        action.triggered.connect(self._convert_current)
 
     # ===========================
-    # 入口（經 ensure_dependencies）
+    # Entry points
     # ===========================
 
-    def _convert_current_guarded(self):
+    def _convert_current(self) -> None:
         lang = self._lang()
         if not self.viewer.deep_zoom:
             QMessageBox.warning(
@@ -76,11 +102,9 @@ class IconConverterPlugin(ImervuePlugin):
                 lang.get("no_image", "No image loaded"),
             )
             return
+        self._convert_to_icon(self.viewer.model.images[self.viewer.current_index])
 
-        path = self.viewer.model.images[self.viewer.current_index]
-        _ensure_deps(self.main_window, lambda: self._convert_to_icon(path))
-
-    def _select_and_convert_guarded(self):
+    def _select_and_convert(self) -> None:
         lang = self._lang()
         file_path, _ = QFileDialog.getOpenFileName(
             self.main_window,
@@ -89,48 +113,28 @@ class IconConverterPlugin(ImervuePlugin):
             "PNG Files (*.png)",
         )
         if file_path:
-            _ensure_deps(self.main_window, lambda: self._convert_to_icon(file_path))
+            self._convert_to_icon(file_path)
 
-    # ===========================
-    # 核心轉換
-    # ===========================
-
-    def _convert_to_icon(self, file_path: str):
-        from PIL import Image
-
+    def _convert_to_icon(self, file_path: str) -> None:
         lang = self._lang()
         try:
-            img = Image.open(file_path).convert("RGBA")
-
-            output_dir = Path(file_path).parent / "icons"
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            for size in SIZES:
-                resized = img.resize((size, size), Image.LANCZOS)
-
-                resized.save(str(output_dir / f"icon_{size}x{size}.png"))
-                resized.save(
-                    str(output_dir / f"icon_{size}x{size}.ico"),
-                    format="ICO",
-                    sizes=[(size, size)],
-                )
-
-            QMessageBox.information(
-                self.main_window,
-                "OK",
-                f"{lang.get('success', 'Icons saved to:')} \n{output_dir}",
-            )
-
-        except Exception as e:
-            logger.error(f"Icon conversion failed: {e}")
+            write_icon_set(file_path)
+        except (OSError, ValueError) as exc:
+            logger.exception("Icon conversion failed for %s", file_path)
             QMessageBox.critical(
                 self.main_window,
                 lang.get("error", "Error"),
-                str(e),
+                str(exc),
             )
+            return
+        QMessageBox.information(
+            self.main_window,
+            "OK",
+            f"{lang.get('success', 'Icons saved to:')} \n{icon_output_dir(file_path)}",
+        )
 
     # ===========================
-    # 翻譯
+    # Translations
     # ===========================
 
     def get_translations(self) -> dict[str, dict[str, str]]:
