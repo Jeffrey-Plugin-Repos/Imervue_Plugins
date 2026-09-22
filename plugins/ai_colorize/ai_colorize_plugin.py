@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -38,6 +38,7 @@ from ai_colorize.colorize import (
 from Imervue.multi_language.language_wrapper import language_wrapper
 from Imervue.plugin.model_dir import discover_models
 from Imervue.plugin.plugin_base import ImervuePlugin
+from Imervue.plugin.worker_host import WorkerHostMixin
 
 if TYPE_CHECKING:
     from Imervue.gpu_image_view.gpu_image_view import GPUImageView
@@ -152,13 +153,14 @@ class AIColorizePlugin(ImervuePlugin):
         AIColorizeDialog(viewer, str(images[idx])).exec()
 
 
-class AIColorizeDialog(QDialog):
-    """Pick method + intensity, run synchronously on OK."""
+class AIColorizeDialog(WorkerHostMixin, QDialog):
+    """Pick method + intensity; run on a worker thread on OK."""
 
     def __init__(self, viewer: GPUImageView, path: str, parent=None):
         super().__init__(viewer if isinstance(viewer, QWidget) else parent)
         self._viewer = viewer
         self._path = path
+        self._worker: _ColorizeWorker | None = None
         lang = language_wrapper.language_word_dict
         self.setWindowTitle(lang.get("ai_colorize_title", "AI Colorize"))
         self.setMinimumWidth(440)
@@ -221,43 +223,27 @@ class AIColorizeDialog(QDialog):
         return buttons
 
     def _commit(self) -> None:
-        try:
-            arr = _load_rgba(self._path)
-        except (OSError, ValueError) as exc:
-            self._notify_failure(exc)
+        if self._worker is not None:
             return
-
         method_data = str(self._method.currentData())
         intensity = self._intensity.value() / _PERCENT_STEPS
-        try:
-            out_arr = self._dispatch(arr, method_data, intensity)
-        except (ImportError, OSError, ValueError, RuntimeError) as exc:
-            self._notify_failure(exc)
-            return
-
         out_path = Path(self._path).with_name(
             f"{Path(self._path).stem}_colorized.png",
         )
-        try:
-            Image.fromarray(out_arr, mode="RGBA").save(str(out_path))
-        except OSError as exc:
-            self._notify_failure(exc)
+        # Heuristic colorize is numpy-heavy and ONNX inference is slow — worker it.
+        self._worker = _ColorizeWorker(
+            self._path, method_data, intensity, str(out_path),
+        )
+        self._worker.done.connect(self._on_done)
+        self._worker.start()
+
+    def _on_done(self, ok: bool, message: str) -> None:
+        self._worker = None
+        if not ok:
+            self._notify_failure(RuntimeError(message))
             return
-
-        self._notify_success(out_path)
+        self._notify_success(Path(message))
         self.accept()
-
-    @staticmethod
-    def _dispatch(arr: np.ndarray, method_data: str, intensity: float) -> np.ndarray:
-        if method_data.startswith("heuristic:"):
-            preset = method_data.split(":", 1)[1]
-            return heuristic_colorize(arr, ColorizeOptions(
-                method=preset, intensity=intensity,
-            ))
-        if method_data.startswith("onnx:"):
-            model_path = method_data.split(":", 1)[1]
-            return onnx_colorize(arr, model_path, intensity=intensity)
-        raise ValueError(f"Unknown method data: {method_data}")
 
     def _notify_failure(self, exc: Exception) -> None:
         if hasattr(self._viewer, "main_window") and hasattr(
@@ -304,3 +290,45 @@ def _load_rgba(path: str) -> np.ndarray:
     if img.mode != "RGBA":
         img = img.convert("RGBA")
     return np.array(img)
+
+
+def _colorize_dispatch(arr: np.ndarray, method_data: str,
+                       intensity: float) -> np.ndarray:
+    if method_data.startswith("heuristic:"):
+        preset = method_data.split(":", 1)[1]
+        return heuristic_colorize(arr, ColorizeOptions(
+            method=preset, intensity=intensity,
+        ))
+    if method_data.startswith("onnx:"):
+        model_path = method_data.split(":", 1)[1]
+        return onnx_colorize(arr, model_path, intensity=intensity)
+    raise ValueError(f"Unknown method data: {method_data}")
+
+
+class _ColorizeWorker(QThread):
+    """Run heuristic or ONNX colorize off the UI thread and save the result."""
+
+    done = Signal(bool, str)
+
+    def __init__(self, path: str, method_data: str, intensity: float,
+                 out_path: str):
+        super().__init__()
+        self._path = path
+        self._method_data = method_data
+        self._intensity = intensity
+        self._out_path = out_path
+
+    def run(self) -> None:  # pragma: no cover - background thread
+        try:
+            arr = _load_rgba(self._path)
+            out_arr = _colorize_dispatch(arr, self._method_data, self._intensity)
+            Image.fromarray(out_arr, mode="RGBA").save(self._out_path)
+        except Exception as exc:  # noqa: BLE001 - a worker thread must always report
+            # ONNX / cv2 / PIL raise their own Exception subclasses (ORT's
+            # InvalidArgument, cv2.error, DecompressionBombError) that are not
+            # in the narrow tuple; letting them escape kills the thread with
+            # ``done`` never emitted, so the dialog hangs with a dead OK button.
+            logger.exception("colorize worker failed: %s", exc)
+            self.done.emit(False, str(exc))
+            return
+        self.done.emit(True, self._out_path)

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -35,6 +35,7 @@ from ai_style_transfer.style_transfer import StyleTransferOptions, stylise
 from Imervue.multi_language.language_wrapper import language_wrapper
 from Imervue.plugin.model_dir import discover_models
 from Imervue.plugin.plugin_base import ImervuePlugin
+from Imervue.plugin.worker_host import WorkerHostMixin
 
 if TYPE_CHECKING:
     from Imervue.gpu_image_view.gpu_image_view import GPUImageView
@@ -129,13 +130,14 @@ class AIStyleTransferPlugin(ImervuePlugin):
         StyleTransferDialog(viewer, str(images[idx])).exec()
 
 
-class StyleTransferDialog(QDialog):
-    """Pick model + intensity, run synchronously on OK."""
+class StyleTransferDialog(WorkerHostMixin, QDialog):
+    """Pick model + intensity; run on a worker thread on OK."""
 
     def __init__(self, viewer: GPUImageView, path: str, parent=None):
         super().__init__(viewer if isinstance(viewer, QWidget) else parent)
         self._viewer = viewer
         self._path = path
+        self._worker: _StyleTransferWorker | None = None
         lang = language_wrapper.language_word_dict
         self.setWindowTitle(lang.get("style_transfer_title", "AI Style Transfer"))
         self.setMinimumWidth(440)
@@ -201,32 +203,26 @@ class StyleTransferDialog(QDialog):
         if not model_path:
             self._notify_failure(RuntimeError("no model selected"))
             return
-        try:
-            arr = _load_rgba(self._path)
-        except (OSError, ValueError) as exc:
-            self._notify_failure(exc)
+        if self._worker is not None:
             return
-
+        # ONNX style-transfer inference is slow — run it on a worker thread.
         options = StyleTransferOptions(
             model_path=model_path,
             intensity=self._intensity.value() / _PERCENT_STEPS,
         )
-        try:
-            out_arr = stylise(arr, options)
-        except (ImportError, OSError, ValueError, RuntimeError) as exc:
-            self._notify_failure(exc)
-            return
-
         out_path = Path(self._path).with_name(
             f"{Path(self._path).stem}_styled.png",
         )
-        try:
-            Image.fromarray(out_arr, mode="RGBA").save(str(out_path))
-        except OSError as exc:
-            self._notify_failure(exc)
-            return
+        self._worker = _StyleTransferWorker(self._path, options, str(out_path))
+        self._worker.done.connect(self._on_done)
+        self._worker.start()
 
-        self._notify_success(out_path)
+    def _on_done(self, ok: bool, message: str) -> None:
+        self._worker = None
+        if not ok:
+            self._notify_failure(RuntimeError(message))
+            return
+        self._notify_success(Path(message))
         self.accept()
 
     def _notify_failure(self, exc: Exception) -> None:
@@ -273,3 +269,29 @@ def _load_rgba(path: str) -> np.ndarray:
     if img.mode != "RGBA":
         img = img.convert("RGBA")
     return np.array(img)
+
+
+class _StyleTransferWorker(QThread):
+    """Run ONNX style-transfer inference off the UI thread and save the result."""
+
+    done = Signal(bool, str)
+
+    def __init__(self, path: str, options: StyleTransferOptions, out_path: str):
+        super().__init__()
+        self._path = path
+        self._options = options
+        self._out_path = out_path
+
+    def run(self) -> None:  # pragma: no cover - background thread
+        try:
+            out_arr = stylise(_load_rgba(self._path), self._options)
+            Image.fromarray(out_arr, mode="RGBA").save(self._out_path)
+        except Exception as exc:  # noqa: BLE001 - a worker thread must always report
+            # ONNX / cv2 / PIL raise their own Exception subclasses (ORT's
+            # InvalidArgument, cv2.error, DecompressionBombError) that are not
+            # in the narrow tuple; letting them escape kills the thread with
+            # ``done`` never emitted, so the dialog hangs with a dead OK button.
+            logger.exception("style-transfer worker failed: %s", exc)
+            self.done.emit(False, str(exc))
+            return
+        self.done.emit(True, self._out_path)

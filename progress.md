@@ -7,5 +7,4 @@ The update log for this repository is `D:\Codes\Imervue\docs\updates\` (tag `#Im
 
 ## Open
 
-- **#1** 13 files across 11 plugins are older than in `Imervue/plugins/` (ai_background_remover, ai_colorize, ai_denoise, ai_motion_deblur, ai_portrait_relight, ai_smart_resize, ai_style_transfer, npr_filters, object_splitter, portrait_mode, spanish_translation), including the 2026-07-16..18 background-worker and cancel-leak fixes. Mirror them (workspace X-9).
 - **#2** `README.md` is an old short guide: it cites a nonexistent `example_plugin` and has no plugin list (workspace X-10).

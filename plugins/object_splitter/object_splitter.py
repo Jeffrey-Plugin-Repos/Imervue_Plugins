@@ -23,11 +23,12 @@ from PySide6.QtWidgets import (
 from Imervue.plugin.plugin_base import ImervuePlugin
 from Imervue.plugin.pip_installer import ensure_dependencies
 from Imervue.plugin.model_dir import ensure_model_dir
+from Imervue.plugin.subprocess_util import terminate_process as _terminate_process
+from Imervue.plugin.worker_host import WorkerHostMixin
 from Imervue.multi_language.language_wrapper import language_wrapper
 from Imervue.system.app_paths import is_frozen as _is_frozen
 
 if TYPE_CHECKING:
-    from Imervue.Imervue_main_window import ImervueMainWindow
     from Imervue.gpu_image_view.gpu_image_view import GPUImageView
 
 logger = logging.getLogger("Imervue.plugin.object_splitter")
@@ -73,6 +74,22 @@ def _subprocess_kwargs() -> dict:
     return kw
 
 
+def _parse_step_line(payload: str) -> tuple[int, int, str] | None:
+    """Parse a ``STEP:`` payload ``"cur:total:msg"`` into ``(cur, total, msg)``.
+
+    Returns ``None`` for a malformed line so a garbled progress update is
+    skipped rather than raising ``ValueError`` — which previously aborted the
+    whole extraction and orphaned the running rembg subprocess.
+    """
+    parts = payload.split(":", 2)
+    if len(parts) != 3:
+        return None
+    try:
+        return int(parts[0]), int(parts[1]), parts[2]
+    except ValueError:
+        return None
+
+
 class _SubprocessWorker(QThread):
     """Run object splitting in an external Python process (frozen env)."""
     step = Signal(int, int, str)  # current, total, message
@@ -89,8 +106,15 @@ class _SubprocessWorker(QThread):
         self._model = model_name
         self._min_area = min_area
         self._padding = padding
+        self._proc = None
+
+    def stop(self):
+        """Terminate the child process so a cancelled worker's stdout-read loop
+        unblocks and wait() returns promptly."""
+        _terminate_process(self._proc)
 
     def run(self):
+        proc = None
         try:
             cmd = [
                 self._python, str(_RUNNER_SCRIPT),
@@ -102,14 +126,15 @@ class _SubprocessWorker(QThread):
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 **_subprocess_kwargs(),
             )
-            for line in proc.stdout:
-                line = line.rstrip("\n\r")
+            self._proc = proc
+            for raw in proc.stdout:
+                line = raw.rstrip("\n\r")
                 if not line:
                     continue
                 if line.startswith("STEP:"):
-                    parts = line[5:].split(":", 2)
-                    if len(parts) == 3:
-                        self.step.emit(int(parts[0]), int(parts[1]), parts[2])
+                    step = _parse_step_line(line[5:])
+                    if step is not None:
+                        self.step.emit(*step)
                 elif line.startswith("OK:"):
                     self.result_ready.emit(True, line[3:])
                     proc.wait()
@@ -127,6 +152,10 @@ class _SubprocessWorker(QThread):
         except Exception as exc:
             logger.error("_SubprocessWorker failed: %s", exc, exc_info=True)
             self.result_ready.emit(False, str(exc))
+        finally:
+            # Guarantee the rembg child is reaped even if reading its output
+            # raised mid-stream or an early return skipped the wait().
+            _terminate_process(proc)
 
 
 class _InProcessWorker(QThread):
@@ -255,7 +284,7 @@ def _connected_components(binary):
 # Dialog
 # ===========================
 
-class ObjectSplitterDialog(QDialog):
+class ObjectSplitterDialog(WorkerHostMixin, QDialog):
 
     def __init__(self, main_gui: GPUImageView, image_path: str,
                  frozen_env: tuple[str, str] | None = None):
@@ -400,12 +429,6 @@ class ObjectSplitterDialog(QDialog):
             self._status_label.setText(f"Error: {result}")
             if hasattr(self._gui.main_window, "toast"):
                 self._gui.main_window.toast.info(f"Error: {result}")
-
-    def closeEvent(self, event):
-        if self._worker and self._worker.isRunning():
-            self._worker.wait(5000)
-            self._worker = None
-        super().closeEvent(event)
 
 
 # ===========================

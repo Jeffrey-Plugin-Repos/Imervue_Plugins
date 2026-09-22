@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -42,6 +42,7 @@ from ai_motion_deblur.deblur import (
 from Imervue.multi_language.language_wrapper import language_wrapper
 from Imervue.plugin.model_dir import discover_models
 from Imervue.plugin.plugin_base import ImervuePlugin
+from Imervue.plugin.worker_host import WorkerHostMixin
 
 if TYPE_CHECKING:
     from Imervue.gpu_image_view.gpu_image_view import GPUImageView
@@ -166,13 +167,14 @@ class AIMotionDeblurPlugin(ImervuePlugin):
         AIMotionDeblurDialog(viewer, str(images[idx])).exec()
 
 
-class AIMotionDeblurDialog(QDialog):
-    """Pick PSF type + tweak knobs, run synchronously on OK."""
+class AIMotionDeblurDialog(WorkerHostMixin, QDialog):
+    """Pick PSF type + tweak knobs; run on a worker thread on OK."""
 
     def __init__(self, viewer: GPUImageView, path: str, parent=None):
         super().__init__(viewer if isinstance(viewer, QWidget) else parent)
         self._viewer = viewer
         self._path = path
+        self._worker: _DeblurWorker | None = None
         lang = language_wrapper.language_word_dict
         self.setWindowTitle(lang.get("deblur_title", "AI Motion Deblur"))
         self.setMinimumWidth(460)
@@ -281,41 +283,36 @@ class AIMotionDeblurDialog(QDialog):
         return buttons
 
     def _commit(self) -> None:
-        try:
-            arr = _load_rgba(self._path)
-        except (OSError, ValueError) as exc:
-            self._notify_failure(exc)
+        if self._worker is not None:
             return
-
         method = self._method.currentData()
         blend = self._blend.value() / _PERCENT_STEPS
-
-        try:
-            if method[0] == "wiener":
-                out_arr = wiener_deblur(arr, WienerOptions(
-                    psf_kind=method[1],
-                    gaussian_radius=int(self._gauss_radius.value()),
-                    motion_length=int(self._motion_length.value()),
-                    motion_angle=int(self._motion_angle.value()),
-                    snr_db=int(self._snr.value()),
-                    blend=blend,
-                ))
-            else:
-                out_arr = onnx_deblur(arr, method[1], blend=blend)
-        except (ImportError, OSError, ValueError) as exc:
-            self._notify_failure(exc)
-            return
-
+        wiener_opts = None
+        if method[0] == "wiener":
+            wiener_opts = WienerOptions(
+                psf_kind=method[1],
+                gaussian_radius=int(self._gauss_radius.value()),
+                motion_length=int(self._motion_length.value()),
+                motion_angle=int(self._motion_angle.value()),
+                snr_db=int(self._snr.value()),
+                blend=blend,
+            )
         out_path = Path(self._path).with_name(
             f"{Path(self._path).stem}_deblur.png",
         )
-        try:
-            Image.fromarray(out_arr, mode="RGBA").save(str(out_path))
-        except OSError as exc:
-            self._notify_failure(exc)
-            return
+        # Wiener deconvolution (FFT) and ONNX inference are slow — run on a worker.
+        self._worker = _DeblurWorker(
+            self._path, method, blend, wiener_opts, str(out_path),
+        )
+        self._worker.done.connect(self._on_done)
+        self._worker.start()
 
-        self._notify_success(out_path)
+    def _on_done(self, ok: bool, message: str) -> None:
+        self._worker = None
+        if not ok:
+            self._notify_failure(RuntimeError(message))
+            return
+        self._notify_success(Path(message))
         self.accept()
 
     def _notify_failure(self, exc: Exception) -> None:
@@ -359,3 +356,36 @@ def _load_rgba(path: str) -> np.ndarray:
     if img.mode != "RGBA":
         img = img.convert("RGBA")
     return np.array(img)
+
+
+class _DeblurWorker(QThread):
+    """Run Wiener or ONNX deblur off the UI thread and save the result."""
+
+    done = Signal(bool, str)
+
+    def __init__(self, path: str, method, blend: float,
+                 wiener_opts: WienerOptions | None, out_path: str):
+        super().__init__()
+        self._path = path
+        self._method = method
+        self._blend = blend
+        self._wiener_opts = wiener_opts
+        self._out_path = out_path
+
+    def run(self) -> None:  # pragma: no cover - background thread
+        try:
+            arr = _load_rgba(self._path)
+            if self._method[0] == "wiener":
+                out_arr = wiener_deblur(arr, self._wiener_opts)
+            else:
+                out_arr = onnx_deblur(arr, self._method[1], blend=self._blend)
+            Image.fromarray(out_arr, mode="RGBA").save(self._out_path)
+        except Exception as exc:  # noqa: BLE001 - a worker thread must always report
+            # ONNX / cv2 / PIL raise their own Exception subclasses (ORT's
+            # InvalidArgument, cv2.error, DecompressionBombError) that are not
+            # in the narrow tuple; letting them escape kills the thread with
+            # ``done`` never emitted, so the dialog hangs with a dead OK button.
+            logger.exception("motion-deblur worker failed: %s", exc)
+            self.done.emit(False, str(exc))
+            return
+        self.done.emit(True, self._out_path)
