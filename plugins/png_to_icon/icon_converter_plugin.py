@@ -18,7 +18,7 @@ from Imervue.multi_language.language_wrapper import language_wrapper
 from Imervue.plugin.plugin_base import ImervuePlugin
 
 if TYPE_CHECKING:
-    from PySide6.QtWidgets import QMenu, QMenuBar
+    from PySide6.QtWidgets import QMenu
 
     from Imervue.gpu_image_view.gpu_image_view import GPUImageView
 
@@ -72,9 +72,9 @@ class IconConverterPlugin(ImervuePlugin):
     # Menu Hooks
     # ===========================
 
-    def on_build_menu_bar(self, menu_bar: QMenuBar) -> None:
+    def on_build_menu_bar(self, plugin_menu: QMenu) -> None:
         lang = self._lang()
-        menu = menu_bar.addMenu(lang.get("icon_tools_menu", "Icon Tools"))
+        menu = plugin_menu.addMenu(lang.get("icon_tools_menu", "Icon Tools"))
 
         action = menu.addAction(lang.get("convert_current", "Convert Current Image to Icon"))
         action.triggered.connect(self._convert_current)
