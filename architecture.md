@@ -3,7 +3,7 @@
 > Short overview of Imervue's public plugin distribution repository. No `architecture_explore.md`
 > here; plugin internals are mapped in the Imervue repo's `architecture_explore.md` §7.
 >
-> Last verified: 2026-09-22 against `13fd504` on `main`.
+> Last verified: 2026-09-22 against `92ec912` on `main`.
 
 ## 1. Purpose
 
@@ -18,13 +18,15 @@ each plugin directory is a manual mirror of `plugins/<name>/` in the Imervue rep
 | `plugins/<name>/` | Feature plugins. `__init__.py` sets `plugin_class`; the class subclasses `Imervue.plugin.plugin_base.ImervuePlugin` |
 | `languages/<name>/` | Language plugins (e.g. `spanish_translation/`) |
 | `languages/__init__.py` | Plain file at category level; the downloader only descends into directories, so it is never fetched |
-| `README.md` | Plugin development guide (structure, hooks, discovery, i18n) |
-| `.idea/`, `.gitignore`, `LICENSE` | Tooling and licence; dot-directories are skipped by the downloader |
+| `README.md` | Plugin list and install notes; the development guide itself is Imervue's `PLUGIN_DEV_GUIDE.md` |
+| `.gitignore`, `LICENSE`, `CLAUDE.md`, `architecture.md`, `progress.md` | Repository files; the downloader only looks inside `plugins/` and `languages/` |
 
-`Imervue/plugin/plugin_downloader.py` (in Imervue) lists
-`https://api.github.com/repos/Jeffrey-Plugin-Repos/Imervue_Plugins/contents` on the default branch
-(`main`), treats each top-level directory not starting with `.` as a category and each directory
-inside it as one plugin, and downloads **only the files directly inside** `<category>/<plugin>/`.
+`Imervue/plugin/plugin_downloader.py` (in Imervue) lists `main` with one recursive git-tree call
+(`/git/trees/main?recursive=1`), accepts only the categories `plugins` and `languages`, treats each
+directory inside them as one plugin, and downloads **only the files directly inside**
+`<category>/<plugin>/` from raw.githubusercontent. Imervue releases up to 1.0.90 still treat every
+top-level directory not starting with `.` as a category, so no other top-level directory may be
+added while those versions are in use.
 Files land in `<app_dir>/plugins/<plugin>/` (the category is dropped) through a `.partial`
 directory swapped in with `os.replace`; after a restart Imervue's `PluginManager` loads it.
 
@@ -50,8 +52,8 @@ for a removed plugin) → commit and push to `main` → users pick it in Imervue
 - Only `main` reaches users; a mirror committed only to `dev` is invisible to the downloader.
 - Keep every runtime-required file flat; nested directories (`models/`, `assets/`) are never fetched.
 - Plugins import `Imervue.*` modules at runtime, so they must match the Imervue version users run.
-- The parity command in Imervue `CLAUDE.md` compares directory names only; diff file contents too
-  when a plugin was edited rather than added.
+- The parity command in Imervue `CLAUDE.md` compares every flat file's content (line endings
+  ignored); no output means the mirror is in sync.
 - The no-attribution rule for commit messages in Imervue `CLAUDE.md` applies here as well.
 
 ## 6. When to update this file

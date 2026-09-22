@@ -7,4 +7,3 @@ The update log for this repository is `D:\Codes\Imervue\docs\updates\` (tag `#Im
 
 ## Open
 
-- **#2** `README.md` is an old short guide: it cites a nonexistent `example_plugin` and has no plugin list (workspace X-10).
