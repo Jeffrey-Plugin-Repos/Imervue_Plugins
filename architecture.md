@@ -3,7 +3,7 @@
 > Short overview of Imervue's public plugin distribution repository. No `architecture_explore.md`
 > here; plugin internals are mapped in the Imervue repo's `architecture_explore.md` §7.
 >
-> Last verified: 2026-09-22 against `92ec912` on `main`.
+> Last verified: 2026-09-24 against `80f0aec` on `main`.
 
 ## 1. Purpose
 
@@ -52,6 +52,12 @@ for a removed plugin) → commit and push to `main` → users pick it in Imervue
 - Only `main` reaches users; a mirror committed only to `dev` is invisible to the downloader.
 - Keep every runtime-required file flat; nested directories (`models/`, `assets/`) are never fetched.
 - Plugins import `Imervue.*` modules at runtime, so they must match the Imervue version users run.
+  Shared helpers come from there instead of being copied into each plugin (`load_rgba`,
+  `_find_python`, `_subprocess_kwargs`; listed in Imervue `architecture.md` §6).
+- A standalone runner script (`safety_review/_runner.py` and `finetune.py`,
+  `object_splitter/_runner.py`) runs in an external Python that cannot import the plugin package, so
+  it loads flat sibling modules instead: `_constants.py`, `_censor_core.py`, `_components.py`. Keep
+  those free of Qt and `Imervue` imports, and import third-party packages only inside functions.
 - The parity command in Imervue `CLAUDE.md` compares every flat file's content (line endings
   ignored); no output means the mirror is in sync.
 - The no-attribution rule for commit messages in Imervue `CLAUDE.md` applies here as well.
