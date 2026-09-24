@@ -4,6 +4,15 @@ Distribution repository for Imervue plugins. Imervue's downloader (`Imervue/plug
 
 The source of truth is `D:\Codes\Imervue\plugins\`; changes are made and tested there and then mirrored here. The mirroring procedure and all rules (no AI attribution, flat files only) are in Imervue's `CLAUDE.md`, section "Mirror plugin changes to the distribution repo".
 
+## README (keep current)
+
+**`README.md` must stay in sync with the code.** It is the only README this repo ships. Any
+user-facing change — the repository layout, the download contract, the plugin/category set — updates
+`README.md` in the same commit. If translated READMEs are ever added, keep them in lockstep with
+`README.md`: every such change lands in `README.md` and every language variant in the same commit,
+structure and content aligned, never one language ahead of the others. No test guards this, so it is
+a manual check.
+
 ## Stage commits, `progress.md` and `architecture.md`
 
 Workspace rule shared by every repository under `D:\Codes` (full text: `D:\Codes\CLAUDE.md`).
