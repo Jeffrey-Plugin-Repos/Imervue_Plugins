@@ -6,12 +6,15 @@ The source of truth is `D:\Codes\Imervue\plugins\`; changes are made and tested 
 
 ## README (keep current)
 
-**`README.md` must stay in sync with the code.** It is the only README this repo ships. Any
-user-facing change — the repository layout, the download contract, the plugin/category set — updates
-`README.md` in the same commit. If translated READMEs are ever added, keep them in lockstep with
-`README.md`: every such change lands in `README.md` and every language variant in the same commit,
-structure and content aligned, never one language ahead of the others. No test guards this, so it is
-a manual check.
+**The README set must stay in sync with the code.** This repo ships a 9-language README set: the
+English `README.md` plus flat, top-level translations `README.zh-TW.md`, `README.zh-CN.md`,
+`README.ja.md`, `README.ko.md`, `README.es.md`, `README.fr.md`, `README.de.md`, `README.pt-BR.md`
+and `README.ru.md`. They are top-level **files**, not a `README/` subdirectory: the downloader treats
+top-level directories as plugin categories (see below), so a subdirectory would be mis-detected, but
+plain files are ignored — hence the flat `README.<lang>.md` scheme. Any user-facing change — the
+repository layout, the download contract, the plugin/category set — updates `README.md` **and every
+language variant in the same commit**, structure and content aligned, never one language ahead of the
+others. No test guards this, so it is a manual check.
 
 ## Stage commits, `progress.md` and `architecture.md`
 
