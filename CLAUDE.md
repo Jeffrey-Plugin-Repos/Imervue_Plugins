@@ -21,6 +21,7 @@ others. No test guards this, so it is a manual check.
 Workspace rule shared by every repository under `D:\Codes` (full text: `D:\Codes\CLAUDE.md`).
 
 - **Commit at every stage**: one mirrored plugin change is one stage. Stage only the files it touched (never `git add -A`), never add AI attribution, and push to `main` as the mirroring procedure says.
+- **Commit and push frequently; do not batch.** After each big feature — a self-contained stage that passes this repository's checks — commit and push to `main`; do not pile up a large batch of work before committing or pushing. Smaller batches collide less with other sessions, let CI catch problems earlier, and are easier to revert. Follow the mirroring procedure's branch flow.
 - **`progress.md`** holds outstanding work only.
 - **No `docs/` directory here.** Any new top-level directory would show up as a plugin category in every Imervue downloader already shipped. The update log for this repository lives in Imervue's `docs/updates/` under the tag `#Imervue_Plugins`.
 - **`architecture.md`** is the short overview of the repository layout and the download contract; update it in the same commit when the layout or contract changes.
