@@ -39,6 +39,7 @@
 | `plugins/cloud_share` | 把当前图片上传到 WebDAV 或 Imgur（仅限 HTTPS） | — |
 | `plugins/npr_filters` | 铅笔素描、油画、水彩与线稿风格 | opencv-python |
 | `plugins/object_splitter` | 移除背景并把每个物体各自保存为透明 PNG | rembg、onnxruntime |
+| `plugins/pet_integrations` | 让桌面宠物响应 OBS 事件、Twitch 聊天关键词、本机 Webhook 和 Windows 通知；也是桌面宠物插件的示例 | obs-websocket-py（OBS）、winrt（Windows 通知），首次使用时安装；需要带 `on_pet_created` 钩子的 Imervue |
 | `plugins/png_to_icon` | 把 PNG 转换为多尺寸的 `.png` 与 `.ico` 图标 | — |
 | `plugins/portrait_mode` | 模糊检测到的主体背后的背景 | rembg、onnxruntime |
 | `plugins/safety_review` | 检测并马赛克露骨区域，附手动编辑器与数据集导出 | 照片用 nudenet + onnxruntime，动漫用 ultralytics + huggingface_hub |

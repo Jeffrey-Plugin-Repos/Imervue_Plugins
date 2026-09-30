@@ -39,6 +39,7 @@ Imervue에서 **Plugins → Download Plugins**를 열고 플러그인을 선택�
 | `plugins/cloud_share` | 현재 이미지를 WebDAV 또는 Imgur에 업로드(HTTPS만) | — |
 | `plugins/npr_filters` | 연필 스케치, 유화, 수채화, 라인아트 스타일 | opencv-python |
 | `plugins/object_splitter` | 배경을 제거하고 각 객체를 개별 투명 PNG로 저장 | rembg, onnxruntime |
+| `plugins/pet_integrations` | 데스크톱 펫이 OBS 이벤트, Twitch 채팅 키워드, 로컬 웹훅, Windows 알림에 반응하게 함. 데스크톱 펫 플러그인 예제이기도 함 | obs-websocket-py(OBS), winrt(Windows 알림), 처음 사용할 때 설치. `on_pet_created` 훅이 있는 Imervue 필요 |
 | `plugins/png_to_icon` | PNG를 여러 크기의 `.png` 및 `.ico` 아이콘으로 변환 | — |
 | `plugins/portrait_mode` | 감지된 피사체 뒤의 배경을 흐리게 처리 | rembg, onnxruntime |
 | `plugins/safety_review` | 노골적인 영역을 감지해 모자이크 처리, 수동 편집기와 데이터셋 내보내기 포함 | 사진은 nudenet + onnxruntime, 애니메이션은 ultralytics + huggingface_hub |

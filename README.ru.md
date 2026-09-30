@@ -39,6 +39,7 @@
 | `plugins/cloud_share` | Загружает текущее изображение в WebDAV или Imgur (только HTTPS) | — |
 | `plugins/npr_filters` | Стили: карандашный набросок, масляная живопись, акварель и контурный рисунок | opencv-python |
 | `plugins/object_splitter` | Удаляет фон и сохраняет каждый объект как отдельный прозрачный PNG | rembg, onnxruntime |
+| `plugins/pet_integrations` | Питомец на рабочем столе реагирует на события OBS, ключевые слова чата Twitch, локальный вебхук и уведомления Windows; заодно пример плагина для питомца | obs-websocket-py (OBS), winrt (уведомления Windows), ставятся при первом использовании; Imervue с хуком `on_pet_created` |
 | `plugins/png_to_icon` | Преобразует PNG в значки `.png` и `.ico` нескольких размеров | — |
 | `plugins/portrait_mode` | Размывает фон за обнаруженным объектом | rembg, onnxruntime |
 | `plugins/safety_review` | Обнаруживает и заштриховывает мозаикой откровенные области, с ручным редактором и экспортом набора данных | nudenet + onnxruntime (фото), ultralytics + huggingface_hub (аниме) |

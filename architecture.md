@@ -54,6 +54,9 @@ for a removed plugin) → commit and push to `main` → users pick it in Imervue
 - Plugins import `Imervue.*` modules at runtime, so they must match the Imervue version users run.
   Shared helpers come from there instead of being copied into each plugin (`load_rgba`,
   `_find_python`, `_subprocess_kwargs`; listed in Imervue `architecture.md` §6).
+  `pet_integrations` also needs the desktop pet's plugin surface (the `on_pet_created` hook,
+  `IntegrationController`, the pet's `add_integration`), also listed there; on an older Imervue it
+  loads but the pet never gets its integrations.
 - A standalone runner script (`safety_review/_runner.py` and `finetune.py`,
   `object_splitter/_runner.py`) runs in an external Python that cannot import the plugin package, so
   it loads flat sibling modules instead: `_constants.py`, `_censor_core.py`, `_components.py`. Keep

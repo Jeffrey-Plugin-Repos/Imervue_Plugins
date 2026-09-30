@@ -39,6 +39,7 @@
 | `plugins/cloud_share` | 把目前的圖片上傳到 WebDAV 或 Imgur（僅限 HTTPS） | — |
 | `plugins/npr_filters` | 鉛筆素描、油畫、水彩與線稿風格 | opencv-python |
 | `plugins/object_splitter` | 移除背景並把每個物件各自存成透明 PNG | rembg、onnxruntime |
+| `plugins/pet_integrations` | 讓桌面寵物對 OBS 事件、Twitch 聊天關鍵字、本機 Webhook 與 Windows 通知做出反應；也是桌面寵物外掛的範例 | obs-websocket-py（OBS）、winrt（Windows 通知），首次使用時安裝；需要有 `on_pet_created` hook 的 Imervue |
 | `plugins/png_to_icon` | 把 PNG 轉成多尺寸的 `.png` 與 `.ico` 圖示 | — |
 | `plugins/portrait_mode` | 模糊偵測到的主體背後的背景 | rembg、onnxruntime |
 | `plugins/safety_review` | 偵測並馬賽克露骨區域，附手動編輯器與資料集匯出 | 照片用 nudenet + onnxruntime，動漫用 ultralytics + huggingface_hub |

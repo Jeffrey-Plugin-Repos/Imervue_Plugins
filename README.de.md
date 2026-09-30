@@ -39,6 +39,7 @@ Plugins, die ein umfangreiches Paket benötigen (onnxruntime, rembg, OpenCV, ...
 | `plugins/cloud_share` | Lädt das aktuelle Bild zu WebDAV oder Imgur hoch (nur HTTPS) | — |
 | `plugins/npr_filters` | Stile: Bleistiftskizze, Ölmalerei, Aquarell und Strichzeichnung | opencv-python |
 | `plugins/object_splitter` | Entfernt den Hintergrund und speichert jedes Objekt als eigenes transparentes PNG | rembg, onnxruntime |
+| `plugins/pet_integrations` | Lässt das Desktop-Pet auf OBS-Ereignisse, Twitch-Chat-Stichwörter, einen lokalen Webhook und Windows-Benachrichtigungen reagieren; zugleich das Beispiel für ein Desktop-Pet-Plugin | obs-websocket-py (OBS), winrt (Windows-Benachrichtigungen), bei der ersten Nutzung installiert; ein Imervue mit dem Hook `on_pet_created` |
 | `plugins/png_to_icon` | Wandelt ein PNG in `.png`- und `.ico`-Symbole in mehreren Größen um | — |
 | `plugins/portrait_mode` | Verschwimmt den Hintergrund hinter dem erkannten Motiv | rembg, onnxruntime |
 | `plugins/safety_review` | Erkennt und verpixelt explizite Bereiche, mit manuellem Editor und Datensatz-Export | nudenet + onnxruntime (Fotos), ultralytics + huggingface_hub (Anime) |

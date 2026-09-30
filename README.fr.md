@@ -39,6 +39,7 @@ Les extensions qui nécessitent un paquet lourd (onnxruntime, rembg, OpenCV, ...
 | `plugins/cloud_share` | Téléverse l'image actuelle vers WebDAV ou Imgur (HTTPS uniquement) | — |
 | `plugins/npr_filters` | Styles croquis au crayon, peinture à l'huile, aquarelle et dessin au trait | opencv-python |
 | `plugins/object_splitter` | Supprime l'arrière-plan et enregistre chaque objet dans son propre PNG transparent | rembg, onnxruntime |
+| `plugins/pet_integrations` | Fait réagir le compagnon de bureau aux événements OBS, aux mots-clés du chat Twitch, à un webhook local et aux notifications Windows ; c'est aussi l'exemple de plugin pour le compagnon | obs-websocket-py (OBS), winrt (notifications Windows), installés à la première utilisation ; un Imervue doté du hook `on_pet_created` |
 | `plugins/png_to_icon` | Convertit un PNG en icônes `.png` et `.ico` multi-tailles | — |
 | `plugins/portrait_mode` | Floute l'arrière-plan derrière le sujet détecté | rembg, onnxruntime |
 | `plugins/safety_review` | Détecte et pixellise les régions explicites, avec un éditeur manuel et export de jeu de données | nudenet + onnxruntime (photos), ultralytics + huggingface_hub (anime) |

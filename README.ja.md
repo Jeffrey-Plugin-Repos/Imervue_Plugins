@@ -39,6 +39,7 @@ Imervue で **Plugins → Download Plugins** を開き、プラグインを選�
 | `plugins/cloud_share` | 現在の画像を WebDAV または Imgur にアップロード（HTTPS のみ） | — |
 | `plugins/npr_filters` | 鉛筆スケッチ、油絵、水彩、線画スタイル | opencv-python |
 | `plugins/object_splitter` | 背景を除去し、各オブジェクトを個別の透明 PNG として保存 | rembg、onnxruntime |
+| `plugins/pet_integrations` | デスクトップペットを OBS のイベント、Twitch チャットのキーワード、ローカル Webhook、Windows の通知に反応させる。デスクトップペット用プラグインの例でもある | obs-websocket-py（OBS）、winrt（Windows の通知）。初回使用時にインストール。`on_pet_created` フックのある Imervue が必要 |
 | `plugins/png_to_icon` | PNG を複数サイズの `.png` と `.ico` アイコンに変換 | — |
 | `plugins/portrait_mode` | 検出された被写体の背後の背景をぼかす | rembg、onnxruntime |
 | `plugins/safety_review` | 露骨な領域を検出してモザイク化、手動エディタとデータセットエクスポート付き | 写真は nudenet + onnxruntime、アニメは ultralytics + huggingface_hub |
