@@ -15,6 +15,8 @@
 
 Extensions officielles pour [Imervue](https://github.com/JeffreyChen-s-Utils/Imervue), la visionneuse d'images accélérée par GPU.
 
+GPU Develop reste un accélérateur optionnel d’export par lots. Les nouveaux dialogues choisissent CPU ; GPU à sélectionner explicitement sous Render on. Les opérations couleur mixtes peuvent différer en octets ; seuil ou postérisation activés rendent toute la recette sur CPU pour éviter l’amplification des arrondis. Modify et export CPU partagent sRGB 8 bits ; profils incorporés normalisés une fois, export avec sRGB sauf suppression des métadonnées. Pas d’édition HDR linéaire ni large gamut. wgpu optionnel dans le plugin, sans poids de modèle ; appareil absent/erreur utilisent CPU. Rapports 640k/24MP/60MP justifient les aperçus CPU.
+
 ## Installation
 
 Dans Imervue, ouvrez **Plugins → Download Plugins**, choisissez une extension et cliquez sur **Download**, puis redémarrez Imervue (ou utilisez **Plugins → Reload Plugins**). Le téléchargeur lit la branche `main` de ce dépôt et installe chaque extension dans le répertoire `plugins/` situé à côté d'Imervue (**Plugins → Open Plugin Folder**).

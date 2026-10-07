@@ -15,6 +15,8 @@
 
 [Imervue](https://github.com/JeffreyChen-s-Utils/Imervue) 的官方插件，这是一款 GPU 加速的图片查看器。
 
+GPU 显影保留为可选批量加速。新批量导出对话框默认 CPU，需在运算设备明确选择 GPU。混合色彩阶段可能与 CPU 字节值不同；启用二值化或色阶量化时，整个配方由 CPU 渲染，避免放大舍入误差。Modify 预览与标准 CPU 导出使用同一 8 位 sRGB 流程，嵌入的广色域配置文件只转换一次，导出附带 sRGB 配置，移除元数据时除外。这不是线性 HDR 或广色域编辑流程。wgpu 保留在可选插件中，不下载模型权重；设备缺失或运行失败降级 CPU。固定 64 万／24MP／60MP 速度与像素报告记录保留 CPU 预览的决定。
+
 ## 安装
 
 在 Imervue 中打开 **Plugins → Download Plugins**，选一个插件并点击 **Download**，然后重启 Imervue（或使用 **Plugins → Reload Plugins**）。下载器会读取本仓库的 `main` 分支，并把每个插件安装到 Imervue 旁边的 `plugins/` 目录（**Plugins → Open Plugin Folder**）。

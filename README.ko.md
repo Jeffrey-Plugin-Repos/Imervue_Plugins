@@ -15,6 +15,8 @@
 
 GPU 가속 이미지 뷰어 [Imervue](https://github.com/JeffreyChen-s-Utils/Imervue)의 공식 플러그인입니다.
 
+GPU 현상은 선택적 일괄 내보내기 가속기입니다. 새 대화상자는 CPU를 기본 선택하며 처리 장치에서 GPU를 명시적으로 고릅니다. 혼합 색상 단계의 바이트 값은 CPU와 다를 수 있어 임계값 또는 포스터화가 켜지면 전체 레시피를 CPU로 렌더링하여 반올림 오차 확대를 막습니다. Modify 미리보기와 기본 CPU 출력은 8비트 sRGB를 공유하고 내장 프로필은 한 번 변환하며 메타데이터 제거 외에는 sRGB 프로필을 저장합니다. 선형 HDR 또는 광색역 편집은 아닙니다. wgpu는 선택적 플러그인에만 있고 모델 가중치는 없습니다. 장치 누락·실행 실패는 CPU로 전환합니다. 64만/24MP/60MP 속도·픽셀 보고서가 CPU 미리보기 유지를 기록합니다.
+
 ## 설치
 
 Imervue에서 **Plugins → Download Plugins**를 열고 플러그인을 선택한 뒤 **Download**를 클릭하고 Imervue를 다시 시작합니다(또는 **Plugins → Reload Plugins** 사용). 다운로더는 이 저장소의 `main` 브랜치를 읽어 각 플러그인을 Imervue 옆의 `plugins/` 디렉터리에 설치합니다(**Plugins → Open Plugin Folder**).

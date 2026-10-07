@@ -15,6 +15,8 @@
 
 GPU アクセラレーション対応の画像ビューア [Imervue](https://github.com/JeffreyChen-s-Utils/Imervue) の公式プラグインです。
 
+GPU 現像は任意の一括出力アクセラレーターです。新しい出力ダイアログは CPU を選び、処理デバイスで GPU を明示選択できます。混合色処理では CPU とバイト値が異なることがあり、しきい値・ポスタリゼーション有効時はレシピ全体を CPU で処理して丸め誤差の増幅を防ぎます。Modify プレビューと標準 CPU 出力は 8 ビット sRGB を共有し、埋め込みプロファイルを一度だけ変換、メタデータを除く場合以外は sRGB を付けます。線形 HDR・広色域編集ではありません。wgpu は任意プラグイン内、モデル重みなし。装置不足・実行失敗は CPU に戻ります。64万/24MP/60MP の速度・画素測定で CPU プレビュー維持を記録しました。
+
 ## インストール
 
 Imervue で **Plugins → Download Plugins** を開き、プラグインを選んで **Download** をクリックし、Imervue を再起動します（または **Plugins → Reload Plugins** を使用）。ダウンローダはこのリポジトリの `main` ブランチを読み取り、各プラグインを Imervue の隣にある `plugins/` ディレクトリにインストールします（**Plugins → Open Plugin Folder**）。

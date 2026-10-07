@@ -27,8 +27,9 @@ directory inside them as one plugin, and downloads **only the files directly ins
 `<category>/<plugin>/` from raw.githubusercontent. Imervue releases up to 1.0.90 still treat every
 top-level directory not starting with `.` as a category, so no other top-level directory may be
 added while those versions are in use.
-Files land in `<app_dir>/plugins/<plugin>/` (the category is dropped) through a `.partial`
-directory swapped in with `os.replace`; after a restart Imervue's `PluginManager` loads it.
+Files land in `<app_dir>/plugins/<plugin>/` (the category is dropped). Current Imervue uses
+unique sibling staging and backup/rollback, preserves models/assets, and serializes same-target
+installs. After download, reload each window or restart; older consumers used `.partial` staging.
 
 ## 3. Main flow
 
@@ -72,3 +73,9 @@ the mirroring procedure changes, or a plugin moves between categories. Refresh "
 
 GPU Develop requires plugin API 3 for observed backend status and provider-specific unregister. Reloading one window preserves providers held by another generation/window; imports stay optional and heavy dependencies remain behind the install gate.
 
+
+GPU Develop keeps optional wgpu and discrete-device ownership in the flat plugin, with no model
+weights. New Imervue Batch Export dialogs default to CPU; GPU requires explicit selection. Enabled
+threshold/posterize render the entire recipe on the CPU reference because discontinuous stages
+amplify small GPU rounding errors. Other mixed-color GPU recipes remain approximate; Modify
+previews and exact CPU exports keep the core uint8 sRGB pipeline. No new core API is required.

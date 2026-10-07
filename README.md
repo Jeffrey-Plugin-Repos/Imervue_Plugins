@@ -15,6 +15,8 @@
 
 Official plugins for [Imervue](https://github.com/JeffreyChen-s-Utils/Imervue), the GPU-accelerated image viewer.
 
+GPU Develop remains an optional batch-export accelerator. New Batch Export dialogs default to CPU; choose the GPU explicitly under Render on. Mixed GPU color stages may differ from CPU byte values; enabled threshold or posterize now render the entire recipe on CPU to avoid amplified rounding differences. Modify previews and canonical CPU exports share the same 8-bit sRGB pipeline; embedded wider-gamut profiles are normalized once and exports carry an sRGB profile unless metadata is removed. This is not a linear HDR or wide-gamut editing pipeline. wgpu stays optional in the plugin, which has no model weights; missing devices or runtime failures fall back to CPU. Fixed 640k/24MP/60MP timing and pixel reports document the decision to keep CPU previews.
+
 ## Installing
 
 In Imervue, open **Plugins → Download Plugins**, pick a plugin and click **Download**, then restart Imervue (or use **Plugins → Reload Plugins**). The downloader reads the `main` branch of this repository and installs each plugin into the `plugins/` directory next to Imervue (**Plugins → Open Plugin Folder**).

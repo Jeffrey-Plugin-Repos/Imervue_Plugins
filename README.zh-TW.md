@@ -15,6 +15,8 @@
 
 [Imervue](https://github.com/JeffreyChen-s-Utils/Imervue) 的官方外掛，這是一款 GPU 加速的圖片檢視器。
 
+GPU 顯影維持可選的批次加速。新的批次匯出對話框預設 CPU，需在運算裝置明確選擇 GPU。混合色彩階段可能與 CPU 的位元組值不同；啟用二值化或色階量化時，整個配方改由 CPU 渲染，避免放大捨入差異。Modify 預覽與標準 CPU 匯出使用相同的 8 位元 sRGB 流程，嵌入的廣色域描述檔只轉換一次，匯出附帶 sRGB 描述檔，移除中繼資料時除外。這不是線性 HDR 或廣色域編輯流程。wgpu 留在可選外掛中，外掛不下載模型權重；缺少裝置或執行失敗會降級 CPU。固定 64 萬／24MP／60MP 速度及像素報告記錄維持 CPU 預覽的決定。
+
 ## 安裝
 
 在 Imervue 中開啟 **Plugins → Download Plugins**，挑一個外掛並點 **Download**，然後重新啟動 Imervue（或使用 **Plugins → Reload Plugins**）。下載器會讀取本儲存庫的 `main` 分支，並把每個外掛安裝到 Imervue 旁邊的 `plugins/` 目錄（**Plugins → Open Plugin Folder**）。

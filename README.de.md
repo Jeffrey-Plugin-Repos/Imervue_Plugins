@@ -15,6 +15,8 @@
 
 Offizielle Plugins für [Imervue](https://github.com/JeffreyChen-s-Utils/Imervue), den GPU-beschleunigten Bildbetrachter.
 
+GPU Develop bleibt optional für Batch-Export. Neue Dialoge wählen CPU; GPU unter Render on ausdrücklich auswählen. Gemischte GPU-Farboperationen können andere Bytewerte liefern; aktiver Threshold oder Posterize rendert das ganze Rezept auf CPU, damit Rundungsfehler nicht verstärkt werden. Modify und CPU-Export teilen die 8-Bit-sRGB-Pipeline; eingebettete Profile werden einmal normalisiert, Exporte erhalten sRGB außer bei entfernten Metadaten. Keine lineare HDR-/Wide-Gamut-Bearbeitung. wgpu bleibt optional im Plugin, ohne Modellgewichte; fehlende Geräte/Laufzeitfehler fallen auf CPU zurück. Messungen für 640k/24MP/60MP dokumentieren die Entscheidung für CPU-Vorschauen.
+
 ## Installation
 
 Öffne in Imervue **Plugins → Download Plugins**, wähle ein Plugin und klicke auf **Download**, starte dann Imervue neu (oder verwende **Plugins → Reload Plugins**). Der Downloader liest den `main`-Branch dieses Repositorys und installiert jedes Plugin in das `plugins/`-Verzeichnis neben Imervue (**Plugins → Open Plugin Folder**).
