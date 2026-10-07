@@ -23,6 +23,8 @@ Pour installer à la main, copiez un répertoire d'extension tel que `plugins/np
 
 Les extensions qui nécessitent un paquet lourd (onnxruntime, rembg, OpenCV, ...) proposent de l'installer la première fois que vous utilisez la fonctionnalité qui en a besoin. Les extensions basées sur ONNX recherchent les fichiers de modèle dans un dossier `models/` à l'intérieur de leur propre répertoire d'extension ; ces fichiers ne sont pas téléchargés, alors placez-y le modèle que vous voulez utiliser. Une extension écrite pour une version plus récente d'Imervue peut ne pas se charger sur une version plus ancienne ; mettez Imervue à jour si cela se produit.
 
+`Manage Plugins` affiche échecs par fenêtre et états communs des dépendances, téléchargements, modèles et backends avec raisons. Chargé signifie vérification optionnelle à l’usage ; résultats gardent modèle/backend et repli CPU. Téléchargement/reprise préserve installation, modèles et ressources ; installation simultanée du même plugin/interpréteur refusée. Annulation sans blocage ; import échoué sans faux succès. `Reload Plugins` relit le code par fenêtre ; GPU Develop conserve les autres fournisseurs et exige API 3. Après téléchargement/reprise, rechargez chaque fenêtre ou redémarrez.
+
 ## Extensions
 
 | Extension | Ce qu'elle fait | Nécessite |

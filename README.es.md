@@ -23,6 +23,8 @@ Para instalar a mano, copia un directorio de complemento como `plugins/npr_filte
 
 Los complementos que necesitan un paquete pesado (onnxruntime, rembg, OpenCV, ...) ofrecen instalarlo la primera vez que usas la función que lo requiere. Los complementos basados en ONNX buscan los archivos de modelo en una carpeta `models/` dentro de su propio directorio de complemento; esos archivos no se descargan, así que coloca ahí el modelo que quieras usar. Un complemento escrito para una versión más nueva de Imervue puede fallar al cargarse en una más antigua; actualiza Imervue si eso ocurre.
 
+`Manage Plugins` muestra fallos por ventana y estados compartidos de dependencias, descarga, modelos y backend con causas. Cargado implica comprobar opciones al usarlas; herramientas conservan modelo/backend y motivo del fallback CPU. Descarga/reintento conserva instalación, modelos y recursos; instalación simultánea del mismo plugin/intérprete se rechaza. Cancelar no bloquea; importaciones fallidas no indican éxito. `Reload Plugins` lee código nuevo por ventana; GPU Develop conserva otros proveedores y requiere API 3. Tras descargar/reintentar, recargue cada ventana o reinicie.
+
 ## Complementos
 
 | Complemento | Qué hace | Necesita |

@@ -3,7 +3,7 @@
 > Short overview of Imervue's public plugin distribution repository. No `architecture_explore.md`
 > here; plugin internals are mapped in the Imervue repo's `architecture_explore.md` §7.
 >
-> Last verified: 2026-09-24 against `80f0aec` on `main`.
+> Last verified: 2026-10-07 on `main`; corresponding commit: `git log -1 -- architecture.md`.
 
 ## 1. Purpose
 
@@ -45,7 +45,12 @@ for a removed plugin) → commit and push to `main` → users pick it in Imervue
 - Heavy dependencies are not vendored: Imervue's `Imervue/plugin/pip_installer.py` installs them at
   runtime, and model weights are discovered at runtime (`Imervue/plugin/model_dir.py`).
 
-## 5. Cross-project boundaries and constraints
+## 5. When to update this file
+
+When a category is added or removed, the downloader contract in `plugin_downloader.py` changes,
+the mirroring procedure changes, or a plugin moves between categories. Refresh "Last verified".
+
+## 6. Cross-project boundaries and constraints
 
 - Imervue is the source of truth; the rule is Imervue `CLAUDE.md` "Mirror plugin changes to the
   distribution repo". Never edit a plugin only here.
@@ -65,7 +70,5 @@ for a removed plugin) → commit and push to `main` → users pick it in Imervue
   ignored); no output means the mirror is in sync.
 - The no-attribution rule for commit messages in Imervue `CLAUDE.md` applies here as well.
 
-## 6. When to update this file
+GPU Develop requires plugin API 3 for observed backend status and provider-specific unregister. Reloading one window preserves providers held by another generation/window; imports stay optional and heavy dependencies remain behind the install gate.
 
-When a category is added or removed, the downloader contract in `plugin_downloader.py` changes,
-the mirroring procedure changes, or a plugin moves between categories. Refresh "Last verified".

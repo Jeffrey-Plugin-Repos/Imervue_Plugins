@@ -23,6 +23,8 @@ To install by hand, copy a plugin directory such as `plugins/npr_filters/` into 
 
 Plugins that need a heavy package (onnxruntime, rembg, OpenCV, ...) offer to install it the first time you use the feature that needs it. The ONNX-based plugins look for model files in a `models/` folder inside their own plugin directory; those files are not downloaded, so put the model you want to use there. A plugin written against a newer Imervue can fail to load on an older one; update Imervue if that happens.
 
+`Manage Plugins` shows per-window load failures and shared dependency, download, model and backend states with reasons. Loaded means optional capabilities are checked on use; shared tool results retain selected model/backend options and CPU fallback reasons. Downloads and retries preserve working installations, models and assets; concurrent installs of the same plugin/interpreter are refused. Dependency dialogs cancel without blocking, and failed imports cannot report success. `Reload Plugins` reads fresh code in each window; GPU Develop retains providers used by other windows and requires plugin API 3. After downloading or retrying, reload each open window (or restart).
+
 ## Plugins
 
 | Plugin | What it does | Needs |
